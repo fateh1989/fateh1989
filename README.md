@@ -9,8 +9,9 @@ Then read as needed:
 - `PROJECTS.md` — maps project names to repositories/locations and current status.
 - `BRIDGE.md` — Android/Termux Bridge architecture, paths, known issues, and verification rules.
 - `WORKING_RULES.md` — engineering, testing, communication, cost, and workflow preferences.
+- `PROGRAMMING_KNOWLEDGE.md` — reusable programming lessons, Android/CI/debug architecture, and proven engineering patterns learned across projects.
 - `RESEARCH.md` — saved research topics and source lists, including heavy-equipment reverse parts lookup.
 
 Important mapping: **RUN = `fateh1989/1122`**. The Termux Bridge is a separate Android/Termux infrastructure layer and is not the RUN repository.
 
-When a durable decision changes, update the appropriate canonical file here so the next conversation can continue from the same state.
+When a durable decision changes, update the appropriate canonical file here so the next conversation can continue from the same state. When a reusable programming lesson is learned, add it to `PROGRAMMING_KNOWLEDGE.md` instead of leaving it only inside one chat.
