@@ -15,6 +15,8 @@ This file is the cross-session handoff for future ChatGPT conversations and codi
 
 RUN is an existing Android application, not a fresh project. Continue incrementally from GitHub. The main branch contains the previously developed automation features and the debug-only RUN Test Lab. CI is used for compilation/tests; real Android behavior must still be verified on a device before claiming end-to-end success.
 
+The Love Wheel is now a local/offline presence engine rather than a hidden template bank. Main commit `55feaa6209802e45ebca64f7b09dbb4710c46c57` adds seven user-selected tone ceilings — 🙂 نبضة, ☕ قهوة, 🍫 شوكولا, 🌹 غزل, 😏 مشاكس, 🌶️ فلفل, 🔥 نار — plus a rotary preview that shows actual message text to the user. Higher levels may still use lighter presence, jokes, emojis and warmth to avoid monotonous intensity. Existing dense romantic content and poetry remain available from level 4 upward. Main CI run #185 passed unit tests, lint, APK build and signing verification; real-device UI/runtime verification is still separate.
+
 When continuing RUN:
 
 1. Open `fateh1989/1122`.
