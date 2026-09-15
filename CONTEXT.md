@@ -21,8 +21,9 @@ When continuing RUN:
 2. Read `AGENTS.md` and recent commits.
 3. Inspect open branches/PRs and the latest GitHub Actions status.
 4. Preserve the existing architecture and user data model.
-5. Make small changes, run tests/lint/build, inspect logs on failure, and only then report success.
-6. Distinguish CI success from device QA success.
+5. Reuse the proven patterns in `PROGRAMMING_KNOWLEDGE.md` where relevant instead of rediscovering them.
+6. Make small changes, run tests/lint/build, inspect logs on failure, and only then report success.
+7. Distinguish CI success from device QA success.
 
 ## Infrastructure model
 
@@ -38,11 +39,14 @@ Do not claim that the Bridge, Remote Desktop Commander, a tunnel, or the phone i
 
 Protect the goal, not a single implementation path. If one route is blocked by Android/platform/security/tooling constraints, identify whether the limit is fundamental or merely architectural, then pivot the implementation instead of declaring the entire project impossible or repeatedly patching a dead end.
 
+Programming knowledge is also durable context. Reusable lessons from Android, Kotlin, CI, debugging, local AI, the Bridge, persistence, scheduling, accessibility, testing, and data architecture belong in `PROGRAMMING_KNOWLEDGE.md` so future conversations inherit accumulated engineering experience rather than only project names and statuses.
+
 ## Files to read next
 
 - `PROJECTS.md` — project/repository/status registry.
 - `BRIDGE.md` — Termux Bridge architecture, paths, known issues, and restart/verification rules.
 - `WORKING_RULES.md` — coding, testing, communication, cost, and workflow preferences.
+- `PROGRAMMING_KNOWLEDGE.md` — reusable engineering knowledge and proven implementation patterns accumulated across projects.
 - `RESEARCH.md` — saved heavy-equipment parts/reverse-lookup sources and research target.
 
-Update these files whenever a durable project decision or infrastructure state changes.
+Update these files whenever a durable project decision, infrastructure state, workflow rule, or reusable programming lesson changes.
