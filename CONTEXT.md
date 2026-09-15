@@ -19,6 +19,8 @@ The Love Wheel is now a local/offline presence engine rather than a hidden templ
 
 On 2026-09-16, PR #5 was merged to `main` as commit `a657ad0c585df7997fdba4046a484e0bddc39d29`, making 🌶️ فلفل and 🔥 نار materially bolder: clearer flirting, stronger mutual anticipation, and more direct pre-meeting tension while keeping the seven-level ceiling model and the local/offline architecture. Branch CI run #186 and main CI run #187 both passed unit tests, Android lint, debug APK build, signing-certificate verification, and artifact upload. Real-device verification of this specific wording update remains separate.
 
+On 2026-09-16, PR #6 was merged to `main` as commit `b03d4205a8ff4a9d98625166ea71d46eadf8c8dc`, adding the first coherent daily Love Wheel story layer. Randomness is now between days while a given day follows deterministic phases (`OPENING`, `EARLY`, `MIDDLE`, `LATE`, `CLOSING`) and one daily mood (`WARM`, `PLAYFUL`, `ROMANTIC`, or `ANTICIPATION`). Morning-capable windows get a clear morning anchor, night-capable windows get a clear good-night closing, and the selected seven-level tone remains a ceiling so a 🔥 day can begin gently, rise later, and cool again. The same day's plan reconstructs consistently after process restart. Branch CI run #190 and main CI run #191 both passed unit tests, Android lint, debug APK build, signing-certificate verification, and artifact upload. Real-device verification of the full day sequence remains separate. Daily send-time randomization/jitter, family workday/holiday profiles, and independent occasion-greeting overlays are still later refinements and should not be reported as implemented yet.
+
 When continuing RUN:
 
 1. Open `fateh1989/1122`.
