@@ -9,11 +9,11 @@
 
     <application
         android:allowBackup="false"
-        android:label="YM"
+        android:label="YM AUTO"
         android:supportsRtl="true"
         android:theme="@style/Theme.YM">
 
-        <activity android:name=".MainActivity" android:exported="true">
+        <activity android:name="com.ym.lite.MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -21,7 +21,7 @@
         </activity>
 
         <service
-            android:name=".automation.YmAccessibilityService"
+            android:name="com.ym.lite.automation.YmAccessibilityService"
             android:exported="false"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
