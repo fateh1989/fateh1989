@@ -15,7 +15,7 @@ import com.ym.lite.core.PlanEngine
 import com.ym.lite.net.YmRelayClient
 import com.ym.lite.security.SecurePrefs
 import org.json.JSONArray
-import java.time.LocalDate
+import java.time.Instant
 import java.time.ZoneId
 
 class YmPlanWorker(
@@ -77,9 +77,12 @@ class YmPlanWorker(
             val end = PlanEngine.parseClock(runs.getString("$runId.window_end", "23:00").orEmpty())
             val caption = runs.getString("$runId.caption", "").orEmpty()
 
+            val zoneId = ZoneId.systemDefault()
+            val createdAt = runs.getLong("$runId.created_at", System.currentTimeMillis())
+            val firstDay = Instant.ofEpochMilli(createdAt).atZone(zoneId).toLocalDate().plusDays(1)
             val plan = PlanEngine.generate(
-                ZoneId.systemDefault(),
-                LocalDate.now().plusDays(1),
+                zoneId,
+                firstDay,
                 days,
                 perDay,
                 start,
@@ -141,9 +144,6 @@ class YmPlanWorker(
                 ).apply()
                 runs.edit().putString("$runId.status", "scheduling").apply()
 
-                // Persist an uncertainty marker before the network call. If the process dies
-                // after the server accepts the post but before we receive its id, a later run
-                // fails closed instead of creating a duplicate post.
                 pending[index] = true
                 saveBooleanArray(runs, "$runId.pending_posts", pending)
 
