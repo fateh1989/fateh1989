@@ -2,6 +2,7 @@ package com.ym.lite.automation
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Path
 import android.graphics.PixelFormat
@@ -14,6 +15,7 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.TextView
+import com.ym.lite.TikTokAutoActivity
 import kotlin.math.roundToInt
 
 class YmTikTokAccessibilityService : AccessibilityService() {
@@ -35,10 +37,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private var commentIndex = 0
     private var comments: List<String> = emptyList()
 
-    private val loop = object : Runnable {
-        override fun run() = tick()
-    }
-
+    private val loop = object : Runnable { override fun run() = tick() }
     private val scopeWatch = object : Runnable {
         override fun run() {
             if (currentTikTokRoot() == null) removeOverlay() else ensureOverlay()
@@ -73,11 +72,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         intervalMs = prefs.getInt("interval_sec", 8).coerceIn(3, 120) * 1000L
         commentEvery = prefs.getInt("comment_every", 3).coerceIn(1, 100)
         comments = localPrefs.getString("comment_pool", "").orEmpty()
-            .lineSequence()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .toList()
-
+            .lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
         handler.removeCallbacks(loop)
         updateOverlayText()
         if (enabled) handler.postDelayed(loop, 800)
@@ -87,21 +82,14 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         enabled = prefs.getBoolean("enabled", false)
         autoComment = prefs.getBoolean("auto_comment", false)
         if (!enabled) return
-
         if (currentTikTokRoot() == null) {
             removeOverlay()
             handler.postDelayed(loop, 500)
             return
         }
-
         val shouldComment = autoComment && comments.isNotEmpty() && ((scrollCount + 1) % commentEvery == 0)
-        if (shouldComment) {
-            attemptComment {
-                handler.postDelayed({ swipeAndContinue() }, 500)
-            }
-        } else {
-            swipeAndContinue()
-        }
+        if (shouldComment) attemptComment { handler.postDelayed({ swipeAndContinue() }, 500) }
+        else swipeAndContinue()
     }
 
     private fun swipeAndContinue() {
@@ -111,24 +99,17 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             handler.postDelayed(loop, 500)
             return
         }
-
         val dm = resources.displayMetrics
-        val x = dm.widthPixels / 2f
-        val startY = dm.heightPixels * 0.79f
-        val endY = dm.heightPixels * 0.21f
         val path = Path().apply {
-            moveTo(x, startY)
-            lineTo(x, endY)
+            moveTo(dm.widthPixels / 2f, dm.heightPixels * 0.79f)
+            lineTo(dm.widthPixels / 2f, dm.heightPixels * 0.21f)
         }
         val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0, 180))
-            .build()
-
+            .addStroke(GestureDescription.StrokeDescription(path, 0, 180)).build()
         if (currentTikTokRoot() == null) {
             handler.postDelayed(loop, 500)
             return
         }
-
         dispatchGesture(gesture, null, null)
         scrollCount++
         updateOverlayText()
@@ -141,10 +122,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             val label = nodeLabel(node)
             label.contains("comment") || label.contains("تعليق") || label.contains("kommentar")
         }
-        if (!clickNode(commentButton)) {
-            done()
-            return
-        }
+        if (!clickNode(commentButton)) { done(); return }
 
         handler.postDelayed(openEditor@{
             val editorRoot = currentTikTokRoot() ?: run { done(); return@openEditor }
@@ -152,19 +130,13 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 node.isEditable || node.className?.toString()?.contains("EditText") == true
             }
             if (editor == null) {
-                safeBackIfTikTok()
-                done()
-                return@openEditor
+                safeBackIfTikTok(); done(); return@openEditor
             }
-
             val text = comments[commentIndex % comments.size]
             val args = Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
             }
-            if (currentTikTokRoot() == null) {
-                done()
-                return@openEditor
-            }
+            if (currentTikTokRoot() == null) { done(); return@openEditor }
             editor.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
             editor.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
 
@@ -177,13 +149,9 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 }
                 if (clickNode(send)) {
                     commentIndex++
-                    handler.postDelayed({
-                        safeBackIfTikTok()
-                        done()
-                    }, 350)
+                    handler.postDelayed({ safeBackIfTikTok(); done() }, 350)
                 } else {
-                    safeBackIfTikTok()
-                    done()
+                    safeBackIfTikTok(); done()
                 }
             }, 300)
         }, 650)
@@ -215,22 +183,15 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         return null
     }
 
-    private fun nodeLabel(node: AccessibilityNodeInfo): String {
-        return listOfNotNull(node.text, node.contentDescription)
-            .joinToString(" ")
-            .lowercase()
-            .trim()
-    }
+    private fun nodeLabel(node: AccessibilityNodeInfo): String =
+        listOfNotNull(node.text, node.contentDescription).joinToString(" ").lowercase().trim()
 
     private fun safeBackIfTikTok() {
         if (currentTikTokRoot() != null) performGlobalAction(GLOBAL_ACTION_BACK)
     }
 
     private fun ensureOverlay() {
-        if (overlay != null) {
-            updateOverlayText()
-            return
-        }
+        if (overlay != null) { updateOverlayText(); return }
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         val density = resources.displayMetrics.density
         val button = TextView(this).apply {
@@ -238,10 +199,8 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             setTextColor(Color.WHITE)
             textSize = 12f
             setPadding(
-                (12 * density).roundToInt(),
-                (9 * density).roundToInt(),
-                (12 * density).roundToInt(),
-                (9 * density).roundToInt(),
+                (12 * density).roundToInt(), (9 * density).roundToInt(),
+                (12 * density).roundToInt(), (9 * density).roundToInt(),
             )
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
@@ -253,6 +212,13 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 val next = !prefs.getBoolean("enabled", false)
                 prefs.edit().putBoolean("enabled", next).apply()
                 reloadFromPrefs()
+            }
+            setOnLongClickListener {
+                if (currentTikTokRoot() == null) return@setOnLongClickListener false
+                startActivity(Intent(this@YmTikTokAccessibilityService, TikTokAutoActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+                true
             }
         }
         val lp = WindowManager.LayoutParams(
@@ -271,7 +237,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     }
 
     private fun updateOverlayText() {
-        overlay?.text = if (prefs.getBoolean("enabled", false)) "AUTO\n● $scrollCount" else "AUTO\n○"
+        overlay?.text = if (prefs.getBoolean("enabled", false)) "YM\n● $scrollCount" else "YM\n○"
     }
 
     private fun removeOverlay() {
