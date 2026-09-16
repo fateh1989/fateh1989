@@ -72,11 +72,17 @@ class AutoActivity : AppCompatActivity() {
         }
         body.addView(autoOrb, LinearLayout.LayoutParams(dp(180), dp(180)).apply { setMargins(0, 0, 0, dp(18)) })
 
+        body.addView(Button(this).apply {
+            text = "TikTok AUTO — التمرير والتعليقات"
+            isAllCaps = false
+            setOnClickListener { startActivity(Intent(this@AutoActivity, TikTokAutoActivity::class.java)) }
+        }, matchWrap())
+
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             progress = 0
         }
-        body.addView(progress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(18)).apply { setMargins(0, 0, 0, dp(14)) })
+        body.addView(progress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(18)).apply { setMargins(0, dp(8), 0, dp(14)) })
 
         status = TextView(this).apply {
             setTextColor(Color.WHITE)
@@ -105,7 +111,7 @@ class AutoActivity : AppCompatActivity() {
         }, matchWrap())
 
         body.addView(Button(this).apply {
-            text = "إيقاف AUTO"
+            text = "إيقاف AUTO النشر"
             isAllCaps = false
             setOnClickListener {
                 WorkManager.getInstance(this@AutoActivity).cancelUniqueWork(YmPlanWorker.UNIQUE_WORK)
@@ -145,12 +151,12 @@ class AutoActivity : AppCompatActivity() {
     private fun render() {
         val running = state.getBoolean("running", false)
         val last = state.getString("last_status", "لا توجد خطة نشطة").orEmpty()
-        status.text = if (running) "● AUTO يعمل في الخلفية\n$last" else "○ AUTO متوقف\n$last"
+        status.text = if (running) "● AUTO النشر يعمل في الخلفية\n$last" else "○ AUTO النشر متوقف\n$last"
         status.setTextColor(if (running) Color.rgb(37, 244, 238) else Color.WHITE)
 
         val runId = state.getString("active_run_id", "").orEmpty()
         if (runId.isBlank()) {
-            summary.text = "لا توجد خطة بعد. افتح إعداد دولاب النشر وحدد الحساب والمكتبة والأوقات."
+            summary.text = "لا توجد خطة نشر بعد. TikTok AUTO للتمرير والتعليقات منفصل ويمكن تشغيله من الزر بالأعلى."
             return
         }
         val account = runs.getString("$runId.account_label", "").orEmpty().ifBlank { "حساب غير مسمى" }
