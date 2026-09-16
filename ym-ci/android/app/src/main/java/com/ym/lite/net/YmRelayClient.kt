@@ -32,6 +32,11 @@ class YmRelayClient(private val baseUrl: String, private val token: String) {
         return text
     }
 
+    fun health(): Boolean {
+        val root = JSONObject(request("/health"))
+        return root.optBoolean("ok", false)
+    }
+
     fun exchangeTikTokAuthCode(authCode: String, codeVerifier: String, grantedScopes: String, redirectUri: String): Account {
         val payload = JSONObject()
             .put("code", authCode)
