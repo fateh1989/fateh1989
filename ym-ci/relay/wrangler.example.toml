@@ -1,0 +1,15 @@
+name = "ym-relay"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# Create a D1 database, then replace the placeholder below.
+[[d1_databases]]
+binding = "DB"
+database_name = "ym-relay"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+# Secrets are set with `wrangler secret put` and MUST NOT be committed:
+# TIKTOK_CLIENT_KEY
+# TIKTOK_CLIENT_SECRET
+# YM_PAIR_TOKEN
+# TOKEN_ENC_KEY   (base64 of 32 random bytes)
