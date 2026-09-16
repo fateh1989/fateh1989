@@ -9,11 +9,13 @@
 
     <application
         android:allowBackup="false"
-        android:label="YM AUTO"
+        android:label="YM"
         android:supportsRtl="true"
         android:theme="@style/Theme.YM">
 
-        <activity android:name="com.ym.lite.MainActivity" android:exported="true">
+        <activity
+            android:name="com.ym.lite.MainActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

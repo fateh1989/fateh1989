@@ -8,12 +8,27 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.ym.lite.auto"
+        applicationId = "com.ym.lite.stable"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.8.0-test"
+        versionCode = 9
+        versionName = "0.9.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("ymStableDebug") {
+            storeFile = file("ym-debug.jks")
+            storePassword = "ymdebug123"
+            keyAlias = "ymdebug"
+            keyPassword = "ymdebug123"
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("ymStableDebug")
+        }
     }
 
     buildFeatures { viewBinding = false }
