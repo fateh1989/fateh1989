@@ -8,11 +8,11 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.ym.lite"
+        applicationId = "com.ym.lite.auto"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.7.0"
+        versionCode = 8
+        versionName = "0.8.0-test"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
