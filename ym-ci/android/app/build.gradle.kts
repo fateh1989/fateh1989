@@ -61,8 +61,8 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.1")
     implementation("com.google.android.material:material:1.12.0")
 
-    implementation("com.tiktok.open.sdk:tiktok-open-sdk-core:2.3.1")
-    implementation("com.tiktok.open.sdk:tiktok-open-sdk-auth:2.3.1")
+    implementation("com.tiktok.open.sdk:tiktok-open-sdk-core:2.3.0")
+    implementation("com.tiktok.open.sdk:tiktok-open-sdk-auth:2.3.0")
 
     testImplementation(kotlin("test"))
 }
