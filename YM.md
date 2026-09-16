@@ -101,6 +101,29 @@ Important: current TikTok Content Sharing Guidelines also impose creator-facing 
 
 The provider boundary is deliberate: if the supported execution route changes, preserve the scheduler/wheels/history and replace only the provider layer.
 
+## Provider route research checkpoint — 2026-09-16
+
+Do **not** choose or build the live provider yet. Research first, then decide.
+
+Routes identified:
+
+1. **TikTok for Developers — Content Posting Direct Post**: works with cloud/web apps and can post directly, but public visibility requires audit/approval and TikTok requires creator-facing privacy/settings UI and explicit consent. Strong fit for normal creator-facing schedulers; uncertain fit for YM's fully unattended private three-account manager.
+2. **TikTok for Developers — Upload/Draft**: uploads media as a draft, then the user must finish the post in TikTok. Safe and official but fails the phone-off/unattended requirement.
+3. **TikTok API for Business — Organic/Accounts API**: has an official endpoint to publish a public video to an owned TikTok account, plus publish status, account analytics, hashtag/location helpers, and management of comments on videos owned by the account. Since March 20, 2026 developers requesting TikTok Accounts scopes must complete an Accounts API Access Application. This route requires a TikTok For Business developer setup and may imply Business Account / Business Center requirements. For EU/UK/US Business Center account-management integration, current TikTok help states a Verified Business Account is required. This is currently the most structurally promising official route for YM, but eligibility/approval must be proven before implementation.
+4. **TikTok Business Center / Web Business Suite native scheduler**: official and low-risk. Current TikTok materials expose account management, analytics and a scheduler; TikTok's scheduler documentation states 15 minutes to 10 days in advance. Good fallback or manual control surface, but by itself does not satisfy a month-long autonomous YM loop.
+5. **TikTok Marketing Partner / third-party scheduler** (Later/Hootsuite/Metricool/Sprout-class tools): proven auto-publishing exists through approved partners. Fastest product route but adds subscription/vendor dependence and does not give YM ownership of the execution layer.
+6. **Unified posting API provider** (for example Post for Me): can absorb OAuth, platform changes and scheduling; some providers support both TikTok API and TikTok Business API. Useful as a temporary or fallback provider behind YM's provider interface, but it is paid/vendor-dependent and must still be checked for whether TikTok posts are truly direct/public versus drafts for the intended account type.
+7. **Browser automation against TikTok Studio/Web Business Suite** (Playwright): open-source projects show this is technically workable and can reuse login state, upload and schedule. It keeps the user's physical phone off, but it is unofficial/brittle: page selectors and login state break, CAPTCHA/re-auth may interrupt it, and browser automation may conflict with TikTok terms/platform controls. Do not use anti-detection/evasion techniques; treat this only as a fallback if a supported route cannot satisfy the product.
+8. **Android app automation on a cloud Android VM/emulator or spare always-on phone**: functionally closest to RUN's execution style and can keep the user's main phone off. However it is operationally heavy, brittle under UI changes/login challenges, and not a preferred route for account safety. A physical spare device is more realistic than an emulator if ever explored, but it violates the goal of an execution engine that is naturally cloud/server based.
+9. **Share Kit / Android intents**: official mobile sharing, but requires a mobile app/user flow and therefore does not satisfy YM's fully unattended phone-off goal.
+10. **Hybrid YM planner + human confirmation**: YM performs wheels/timing/content selection/history/analytics, but sends drafts or prepares scheduled posts for a person to approve. This preserves most of YM's intelligence with the lowest platform risk, but gives up full autonomy.
+
+Important account-type tradeoff: TikTok Business Accounts currently see only the Commercial Music Library when adding sound, whereas Personal Accounts can see the broader sound library. Do not convert the three target accounts to Business Account until the user confirms that losing general music access is acceptable for their content strategy.
+
+Engagement boundary: the Accounts API can create/reply/like/hide/delete comments associated with organic videos owned by the authorized account. It does **not** establish a general supported path for leaving arbitrary comments/emoji on other creators' videos. Keep the original outbound engagement wheel unimplemented until a supported route is found. TikTok publicly prohibits spam/fake engagement and bulk account manipulation.
+
+Current research preference (not a final decision): first prove whether the **TikTok API for Business Accounts/Organic API** can be approved for the intended three owned accounts without unacceptable Business Account tradeoffs. If not, compare a vetted partner/unified provider against a hybrid draft/confirmation model before considering browser/device automation.
+
 ## Not implemented / not live yet
 
 - deployment to a permanent always-on HTTPS host;
@@ -128,11 +151,11 @@ When continuing YM:
 
 ## Next milestones
 
-1. Choose an always-on HTTPS host with persistent storage and secret management; re-check pricing live before choosing.
-2. Deploy v0.5 in `mock` mode first and verify database/media persistence across restart/redeploy.
-3. Point `YM_PUBLIC_BASE_URL` at the final HTTPS origin.
-4. Resolve whether TikTok's official audit/UX model can legitimately support YM's intended unattended public workflow. If not, preserve YM core and change only the provider/execution model.
-5. If a supported path exists, configure the TikTok developer app and connect account 1 through OAuth.
+1. Finish provider-route research and choose the live execution model before any provider deployment.
+2. Choose an always-on HTTPS host with persistent storage and secret management only after provider requirements are known.
+3. Deploy v0.5 in `mock` mode first and verify database/media persistence across restart/redeploy.
+4. Point `YM_PUBLIC_BASE_URL` at the final HTTPS origin if the chosen provider needs pullable media URLs.
+5. Connect account 1 only after the chosen route is approved/supported.
 6. Perform one controlled real post and verify final status end to end.
 7. Extend to accounts 2 and 3 only after account 1 is stable.
 8. Build the three-account dashboard/control client.
