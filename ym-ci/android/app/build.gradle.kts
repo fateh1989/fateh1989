@@ -6,10 +6,9 @@ plugins {
 val tiktokClientKey = (project.findProperty("TIKTOK_CLIENT_KEY") as String?)
     ?: System.getenv("TIKTOK_CLIENT_KEY")
     ?: ""
-val tiktokRedirectHost = (project.findProperty("TIKTOK_REDIRECT_HOST") as String?)
-    ?: System.getenv("TIKTOK_REDIRECT_HOST")
-    ?: "ym.invalid"
-val tiktokRedirectUrl = "https://$tiktokRedirectHost/tiktok/callback"
+val tiktokRedirectUrl = (project.findProperty("TIKTOK_REDIRECT_URL") as String?)
+    ?: System.getenv("TIKTOK_REDIRECT_URL")
+    ?: "https://open-platform.tiktokapis.com/callback"
 
 android {
     namespace = "com.ym.lite"
@@ -19,12 +18,11 @@ android {
         applicationId = "com.ym.lite.stable"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "0.16.0"
+        versionCode = 17
+        versionName = "0.17.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "TIKTOK_CLIENT_KEY", "\"${tiktokClientKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "TIKTOK_REDIRECT_URL", "\"${tiktokRedirectUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
-        manifestPlaceholders["tiktokRedirectHost"] = tiktokRedirectHost
     }
 
     signingConfigs {
