@@ -29,7 +29,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="28dp"
-        android:text="تفعيل فقاعات YM فوق TikTok" />
+        android:text="تفعيل YM AUTO" />
 
     <Button
         android:id="@+id/openTikTok"
@@ -47,14 +47,14 @@
         android:id="@+id/openAdvancedAutomation"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="التعليق التلقائي المتقدم (اختياري)" />
+        android:text="إعدادات خدمة YM AUTO" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="18dp"
         android:gravity="center"
-        android:text="الحساب والفيديو والجلسة من TikTok الرسمي. فقاعات YM الأساسية لا تحتاج إذن إمكانية الوصول أو خيار الثلاث نقاط."
+        android:text="الحساب والفيديو والجلسة من TikTok الرسمي. أدوات YM والأتمتة تتوقف فور الخروج من TikTok."
         android:textColor="#999999"
         android:textSize="14sp" />
 </LinearLayout>
