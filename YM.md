@@ -16,7 +16,7 @@ YM borrows RUN's useful mechanics — wheels, time windows, quantity, history an
 
 Core loop:
 
-`account -> wheel -> time -> quantity -> durable job -> submit -> TikTok status -> history -> next`
+`account -> wheel -> time -> quantity -> durable job -> submit -> provider status -> history -> next`
 
 The phone is a **control panel**, not the execution host. YM is intended to keep running when the phone is fully powered off, so the execution engine must live on an always-on backend/server/container.
 
@@ -30,7 +30,7 @@ The phone is a **control panel**, not the execution host. YM is intended to keep
 6. Engagement is intended as light presence, not repetitive spam; do not wire live commenting until a suitable supported path is confirmed.
 7. Keep YM focused; do not turn it into a general-purpose phone automation framework.
 
-## Current implementation state — v0.4
+## Current implementation state — v0.5
 
 The working bootstrap is stored in ChatGPT Library at:
 
@@ -40,8 +40,9 @@ Files:
 - `YM-bootstrap.zip`
 - `README.md`
 - `STATE.md`
+- `DEPLOY.md`
 
-Implemented and locally verified through v0.4:
+Implemented and locally verified through v0.5:
 - hard limit of 3 accounts;
 - persistent accounts and per-account timezones;
 - persistent wheel definitions/items and media metadata/captions;
@@ -55,47 +56,59 @@ Implemented and locally verified through v0.4:
 - encrypted access/refresh token storage using a server-side Fernet key;
 - proactive access-token refresh and refresh-token rotation;
 - token revoke/disconnect path;
-- official Direct Post provider implementation using creator-info + video init + status fetch;
+- Direct Post provider implementation using creator-info + video init + status fetch;
 - asynchronous publish lifecycle: receiving `publish_id` means submitted, not published;
 - worker polls status and only marks a job published after `PUBLISH_COMPLETE`;
 - local durable media storage for MP4/MOV/WebM;
 - streamed upload with configurable byte limit and SHA-256 metadata;
-- unguessable public media tokens under `/public/media/{token}` for TikTok `PULL_FROM_URL`;
+- unguessable public media tokens under `/public/media/{token}` for provider pull URLs;
 - configurable `YM_PUBLIC_BASE_URL`, `YM_MEDIA_DIR`, and `YM_MAX_MEDIA_BYTES`;
 - safe replacement/deletion of stored media;
+- ffprobe-based local video preflight;
+- codec, width, height, FPS and duration persisted per stored video;
+- preflight status/error persisted in SQLite;
+- stored local media is blocked from worker submission until preflight passes;
+- automatic preflight on `/media/upload` and manual `/media/{id}/preflight`;
+- `/health` liveness plus `/ready` database/media/config readiness endpoint;
+- production Docker image includes ffprobe, runs non-root and uses `/data` for persistent state;
+- `docker-compose.yml`, `.env.example`, and `DEPLOY.md` added;
 - mock provider remains the safe default so development never posts accidentally;
 - REST API for accounts/OAuth/media/wheels/jobs.
 
-Verification for v0.4:
+Verification for v0.5:
 - Python compile check passed;
-- **19 tests passed out of 19**;
-- FastAPI smoke startup passed in mock mode (`YM Core 0.4.0`);
-- media upload/public-fetch smoke test stored bytes and served the same bytes back through the public route;
-- earlier TikTok-configured startup smoke passed with dummy configuration and no external request.
+- **25 tests passed out of 25**;
+- FastAPI smoke startup passed in mock mode (`YM Core 0.5.0`);
+- `/ready` returned ready with writable database/media paths;
+- a real ffmpeg-generated H.264 MP4 (720x1280, 30 FPS, 2 seconds) passed local preflight;
+- API upload smoke persisted that video, computed SHA-256, extracted H.264/720x1280/30 FPS/2s metadata, and returned `preflight_status=passed`.
 
-No real TikTok credentials have been used yet and no real TikTok post has been claimed.
+No real TikTok credentials have been used yet and no real public TikTok post has been claimed.
 
 ## Current TikTok integration boundary
 
-Current official endpoints used by the code:
-- authorization: `https://www.tiktok.com/v2/auth/authorize/`
-- token exchange/refresh: `POST https://open.tiktokapis.com/v2/oauth/token/`
-- creator info: `/v2/post/publish/creator_info/query/`
-- Direct Post video init: `/v2/post/publish/video/init/`
-- post status: `/v2/post/publish/status/fetch/`
-- required Direct Post scope: `video.publish`
+Live-rechecked on 2026-09-16 against official TikTok developer docs:
+- Content Posting formats: MP4, WebM, MOV;
+- codecs: H.264, H.265, VP8, VP9;
+- frame rate: 23–60 FPS;
+- each picture dimension: 360–4096 pixels;
+- developer-send duration ceiling: 10 minutes, while creator-specific maximum must also be honored;
+- maximum size: 4 GB;
+- `PULL_FROM_URL` requires HTTPS and a verified domain or URL prefix;
+- public Direct Post requires an approved `video.publish` path; unaudited clients are restricted to private visibility.
 
-For `PULL_FROM_URL`, live use requires an HTTPS media URL whose domain or URL prefix is verified for the TikTok developer app. Current official media guidance lists MP4, WebM and MOV and a maximum file size of 4 GB; YM's default byte limit matches that maximum. Re-check official TikTok documentation live before changing integration details because API requirements and policies can change.
+Important: current TikTok Content Sharing Guidelines also impose creator-facing UX/consent requirements and describe internal/private account-management upload utilities as an unacceptable intended use for Direct Post API clients. This may conflict with YM's fully unattended public-posting goal even though the HTTP integration is technically implementable. Do not hide this constraint or claim the official provider can deliver unattended public growth until the developer-app/audit path is proven acceptable.
 
-The provider defaults to `SELF_ONLY` until another privacy level is deliberately configured. YM does not yet preflight codec, frame rate, resolution or duration locally.
+The provider boundary is deliberate: if the supported execution route changes, preserve the scheduler/wheels/history and replace only the provider layer.
 
 ## Not implemented / not live yet
 
 - deployment to a permanent always-on HTTPS host;
+- persistence verification on a real host across restart/redeploy;
 - TikTok URL/domain verification against the deployed media origin;
 - first real TikTok developer app/account authorization;
-- first controlled real Direct Post and end-to-end final-status verification;
-- local media preflight for codec/resolution/frame-rate/duration;
+- first controlled real post and end-to-end final-status verification;
+- creator-specific duration enforcement before each live Direct Post;
 - three-account dashboard/control client;
 - real engagement/comment execution;
 - Android control app.
@@ -115,14 +128,22 @@ When continuing YM:
 
 ## Next milestones
 
-1. Choose/deploy a real always-on HTTPS host with persistent DB/media storage and secret management.
-2. Point `YM_PUBLIC_BASE_URL` at that origin and verify the domain/URL prefix in TikTok for Developers.
-3. Configure a TikTok developer app and connect the first real account through OAuth.
-4. Perform one controlled real Direct Post and verify final status end to end.
-5. Add local media preflight checks.
-6. Extend to accounts 2 and 3 only after account 1 is stable.
-7. Build the three-account dashboard/control client.
-8. Add engagement-wheel execution only after confirming a suitable supported path.
+1. Choose an always-on HTTPS host with persistent storage and secret management; re-check pricing live before choosing.
+2. Deploy v0.5 in `mock` mode first and verify database/media persistence across restart/redeploy.
+3. Point `YM_PUBLIC_BASE_URL` at the final HTTPS origin.
+4. Resolve whether TikTok's official audit/UX model can legitimately support YM's intended unattended public workflow. If not, preserve YM core and change only the provider/execution model.
+5. If a supported path exists, configure the TikTok developer app and connect account 1 through OAuth.
+6. Perform one controlled real post and verify final status end to end.
+7. Extend to accounts 2 and 3 only after account 1 is stable.
+8. Build the three-account dashboard/control client.
+9. Add engagement-wheel execution only after confirming a supported path.
+
+## Hosting research note — 2026-09-16
+
+- Render free web services spin down after 15 minutes idle and have ephemeral local files, so they do not satisfy YM's current SQLite + local-media always-on requirement without architectural changes or paid persistent storage.
+- Railway currently has a free plan with limited monthly credit and small volume storage, but real always-on monthly usage must be measured rather than assumed free.
+- Oracle Cloud documentation still lists Always Free compute resources and is a candidate for a zero-cost VM experiment, subject to account/region capacity and current signup requirements.
+- Cloudflare Containers require the Workers Paid plan, so they are not a zero-cost fit for this stage.
 
 ## UX direction
 
