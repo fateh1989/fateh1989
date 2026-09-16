@@ -16,7 +16,7 @@
         android:layout_height="match_parent"
         android:gravity="center"
         android:padding="40dp"
-        android:text="YM\n\nاختر فيديوهات الدولاب من زر +\nثم اسحب للأعلى والأسفل بينها"
+        android:text="YM\n\nواجهة فيديو + AUTO\nاضغط + ثم AUTO لفتح التمرير والتعليق التلقائي"
         android:textColor="#FFFFFF"
         android:textSize="20sp"
         android:textStyle="bold" />
@@ -28,27 +28,8 @@
         android:layout_marginTop="32dp"
         android:gravity="center"
         android:orientation="horizontal">
-
-        <TextView
-            android:id="@+id/followingTab"
-            android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:gravity="center"
-            android:paddingHorizontal="16dp"
-            android:text="يتابع"
-            android:textColor="#BDBDBD"
-            android:textSize="16sp" />
-
-        <TextView
-            android:id="@+id/forYouTab"
-            android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:gravity="center"
-            android:paddingHorizontal="16dp"
-            android:text="لك"
-            android:textColor="#FFFFFF"
-            android:textSize="17sp"
-            android:textStyle="bold" />
+        <TextView android:id="@+id/followingTab" android:layout_width="wrap_content" android:layout_height="48dp" android:gravity="center" android:paddingHorizontal="16dp" android:text="يتابع" android:textColor="#BDBDBD" android:textSize="16sp" />
+        <TextView android:id="@+id/forYouTab" android:layout_width="wrap_content" android:layout_height="48dp" android:gravity="center" android:paddingHorizontal="16dp" android:text="لك" android:textColor="#FFFFFF" android:textSize="17sp" android:textStyle="bold" />
     </LinearLayout>
 
     <LinearLayout
@@ -59,52 +40,12 @@
         android:layout_marginEnd="8dp"
         android:gravity="center"
         android:orientation="vertical">
-
-        <TextView
-            android:id="@+id/profileBubble"
-            android:layout_width="54dp"
-            android:layout_height="54dp"
-            android:background="@drawable/bubble_bg"
-            android:gravity="center"
-            android:text="YM"
-            android:textColor="#FFFFFF"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/likeButton"
-            android:layout_width="64dp"
-            android:layout_height="70dp"
-            android:gravity="center"
-            android:text="♡\n0"
-            android:textColor="#FFFFFF"
-            android:textSize="25sp" />
-
-        <TextView
-            android:id="@+id/commentButton"
-            android:layout_width="64dp"
-            android:layout_height="70dp"
-            android:gravity="center"
-            android:text="●\nتعليق"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
-
-        <TextView
-            android:id="@+id/saveButton"
-            android:layout_width="64dp"
-            android:layout_height="70dp"
-            android:gravity="center"
-            android:text="☆\nحفظ"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp" />
-
-        <TextView
-            android:id="@+id/shareButton"
-            android:layout_width="64dp"
-            android:layout_height="70dp"
-            android:gravity="center"
-            android:text="↗\nمشاركة"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp" />
+        <TextView android:id="@+id/profileBubble" android:layout_width="54dp" android:layout_height="54dp" android:background="@drawable/bubble_bg" android:gravity="center" android:text="YM" android:textColor="#FFFFFF" android:textStyle="bold" />
+        <TextView android:id="@+id/autoRailButton" android:layout_width="58dp" android:layout_height="58dp" android:layout_marginTop="8dp" android:background="@drawable/auto_bubble_bg" android:gravity="center" android:text="AUTO\n○" android:textColor="#FFFFFF" android:textSize="12sp" android:textStyle="bold" />
+        <TextView android:id="@+id/likeButton" android:layout_width="64dp" android:layout_height="64dp" android:gravity="center" android:text="♡\n0" android:textColor="#FFFFFF" android:textSize="22sp" />
+        <TextView android:id="@+id/commentButton" android:layout_width="64dp" android:layout_height="64dp" android:gravity="center" android:text="●\nتعليق" android:textColor="#FFFFFF" android:textSize="13sp" />
+        <TextView android:id="@+id/saveButton" android:layout_width="64dp" android:layout_height="64dp" android:gravity="center" android:text="☆\nحفظ" android:textColor="#FFFFFF" android:textSize="15sp" />
+        <TextView android:id="@+id/shareButton" android:layout_width="64dp" android:layout_height="64dp" android:gravity="center" android:text="↗\nمشاركة" android:textColor="#FFFFFF" android:textSize="14sp" />
     </LinearLayout>
 
     <LinearLayout
@@ -116,25 +57,8 @@
         android:orientation="vertical"
         android:paddingStart="18dp"
         android:paddingEnd="10dp">
-
-        <TextView
-            android:id="@+id/feedAuthor"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@YM"
-            android:textColor="#FFFFFF"
-            android:textSize="17sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/feedCaption"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:maxLines="3"
-            android:text="الدولاب جاهز لاستقبال الفيديوهات"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp" />
+        <TextView android:id="@+id/feedAuthor" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@YM" android:textColor="#FFFFFF" android:textSize="17sp" android:textStyle="bold" />
+        <TextView android:id="@+id/feedCaption" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:maxLines="3" android:text="AUTO هو قلب YM" android:textColor="#FFFFFF" android:textSize="15sp" />
     </LinearLayout>
 
     <LinearLayout
@@ -146,45 +70,15 @@
         android:gravity="center"
         android:orientation="vertical"
         android:visibility="gone">
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/bubbleWheel"
-                style="@style/YmBubble"
-                android:text="دولاب" />
-            <TextView
-                android:id="@+id/bubbleSchedule"
-                style="@style/YmBubble"
-                android:text="جدولة" />
-            <TextView
-                android:id="@+id/bubbleAccounts"
-                style="@style/YmBubble"
-                android:text="حسابات" />
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center" android:orientation="horizontal">
+            <TextView android:id="@+id/bubbleAuto" style="@style/YmBubble" android:background="@drawable/auto_bubble_bg" android:text="AUTO" android:textSize="14sp" />
+            <TextView android:id="@+id/bubbleWheel" style="@style/YmBubble" android:text="دولاب" />
+            <TextView android:id="@+id/bubbleSchedule" style="@style/YmBubble" android:text="جدولة" />
         </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/bubbleProof"
-                style="@style/YmBubble"
-                android:text="اختبار" />
-            <TextView
-                android:id="@+id/bubbleHistory"
-                style="@style/YmBubble"
-                android:text="سجل" />
-            <TextView
-                android:id="@+id/bubbleSettings"
-                style="@style/YmBubble"
-                android:text="ضبط" />
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center" android:orientation="horizontal">
+            <TextView android:id="@+id/bubbleAccounts" style="@style/YmBubble" android:text="حسابات" />
+            <TextView android:id="@+id/bubbleHistory" style="@style/YmBubble" android:text="سجل" />
+            <TextView android:id="@+id/bubbleSettings" style="@style/YmBubble" android:text="ضبط" />
         </LinearLayout>
     </LinearLayout>
 
@@ -197,35 +91,11 @@
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="10dp">
-
-        <TextView
-            android:id="@+id/homeNav"
-            style="@style/YmBottomNav"
-            android:text="⌂\nالرئيسية" />
-        <TextView
-            android:id="@+id/discoverNav"
-            style="@style/YmBottomNav"
-            android:text="⌕\nاكتشف" />
-
-        <TextView
-            android:id="@+id/plusButton"
-            android:layout_width="64dp"
-            android:layout_height="46dp"
-            android:background="@drawable/plus_bg"
-            android:gravity="center"
-            android:text="＋"
-            android:textColor="#000000"
-            android:textSize="28sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/historyNav"
-            style="@style/YmBottomNav"
-            android:text="◷\nالسجل" />
-        <TextView
-            android:id="@+id/profileNav"
-            style="@style/YmBottomNav"
-            android:text="◉\nأنا" />
+        <TextView android:id="@+id/homeNav" style="@style/YmBottomNav" android:text="⌂\nالرئيسية" />
+        <TextView android:id="@+id/discoverNav" style="@style/YmBottomNav" android:text="⌕\nاكتشف" />
+        <TextView android:id="@+id/plusButton" android:layout_width="64dp" android:layout_height="46dp" android:background="@drawable/plus_bg" android:gravity="center" android:text="＋" android:textColor="#000000" android:textSize="28sp" android:textStyle="bold" />
+        <TextView android:id="@+id/historyNav" style="@style/YmBottomNav" android:text="◷\nالسجل" />
+        <TextView android:id="@+id/profileNav" style="@style/YmBottomNav" android:text="◉\nأنا" />
     </LinearLayout>
 
     <FrameLayout
@@ -237,127 +107,62 @@
         android:layout_marginHorizontal="12dp"
         android:background="@drawable/sheet_bg"
         android:visibility="gone">
-
-        <ScrollView
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:fillViewport="true">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="18dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/sheetTitle"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="YM"
-                        android:textColor="#FFFFFF"
-                        android:textSize="22sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/closeSheet"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:gravity="center"
-                        android:text="✕"
-                        android:textColor="#FFFFFF"
-                        android:textSize="22sp" />
+        <ScrollView android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:id="@+id/sheetTitle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="YM" android:textColor="#FFFFFF" android:textSize="22sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/closeSheet" android:layout_width="48dp" android:layout_height="48dp" android:gravity="center" android:text="✕" android:textColor="#FFFFFF" android:textSize="22sp" />
                 </LinearLayout>
 
-                <LinearLayout
-                    android:id="@+id/panelWheel"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
+                <LinearLayout android:id="@+id/panelAuto" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingBottom="10dp" android:text="AUTO يتحكم في TikTok الحقيقي: يمرر تلقائيًا ويضع تعليقًا من قائمتك عند الدور المحدد." android:textColor="#FFFFFF" android:textSize="16sp" />
+                    <TextView android:id="@+id/autoServiceState" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="8dp" android:text="خدمة الوصول: غير مفحوصة" android:textColor="#25F4EE" android:textStyle="bold" />
+                    <Button android:id="@+id/openAccessibility" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="تفعيل صلاحية YM AUTO" />
+                    <Switch android:id="@+id/autoScrollSwitch" android:layout_width="match_parent" android:layout_height="wrap_content" android:checked="true" android:text="التمرير التلقائي" android:textColor="#FFFFFF" />
+                    <EditText android:id="@+id/scrollInterval" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="مدة مشاهدة الفيديو بالثواني" android:inputType="number" android:text="8" android:textColor="#FFFFFF" android:textColorHint="#AAAAAA" />
+                    <Switch android:id="@+id/autoCommentSwitch" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="التعليق التلقائي" android:textColor="#FFFFFF" />
+                    <EditText android:id="@+id/commentEvery" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="تعليق كل كم فيديو؟" android:inputType="number" android:text="3" android:textColor="#FFFFFF" android:textColorHint="#AAAAAA" />
+                    <EditText android:id="@+id/commentPool" android:layout_width="match_parent" android:layout_height="140dp" android:gravity="top|start" android:hint="اكتب التعليقات، كل تعليق في سطر مستقل" android:inputType="textMultiLine" android:textColor="#FFFFFF" android:textColorHint="#AAAAAA" />
+                    <Button android:id="@+id/saveAutoSettings" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="حفظ إعدادات AUTO" />
+                    <Button android:id="@+id/startAuto" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="تشغيل AUTO وفتح TikTok" />
+                    <Button android:id="@+id/stopAuto" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="إيقاف AUTO" />
+                </LinearLayout>
+
+                <LinearLayout android:id="@+id/panelWheel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
                     <Button android:id="@+id/pickVideos" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="اختيار فيديوهات الدولاب" />
                     <TextView android:id="@+id/videoCount" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="8dp" android:text="0 فيديو" android:textColor="#FFFFFF" />
                     <EditText android:id="@+id/caption" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="كابتشن افتراضي" android:inputType="textMultiLine" android:textColor="#FFFFFF" android:textColorHint="#AAAAAA" />
                 </LinearLayout>
 
-                <LinearLayout
-                    android:id="@+id/panelSchedule"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
+                <LinearLayout android:id="@+id/panelSchedule" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
                     <EditText android:id="@+id/dailyCount" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="عدد المنشورات يوميًا" android:inputType="number" android:text="1" android:textColor="#FFFFFF" android:textColorHint="#AAAAAA" />
                     <EditText android:id="@+id/windowStart" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="بداية النافذة HH:mm" android:text="18:00" android:textColor="#FFFFFF" android:textColorHint="#AAAAAA" />
                     <EditText android:id="@+id/windowEnd" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="نهاية النافذة HH:mm" android:text="23:00" android:textColor="#FFFFFF" android:textColorHint="#AAAAAA" />
                     <EditText android:id="@+id/horizonDays" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="عدد الأيام" android:inputType="number" android:text="30" android:textColor="#FFFFFF" android:textColorHint="#AAAAAA" />
+                    <Button android:id="@+id/testOnePost" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="اختبار منشور واحد (+10 دقائق)" />
+                    <Button android:id="@+id/checkLastPost" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="تحقق من آخر نتيجة" />
                     <Button android:id="@+id/createPlan" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="أنشئ الخطة السحابية" />
                 </LinearLayout>
 
-                <LinearLayout
-                    android:id="@+id/panelAccounts"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
+                <LinearLayout android:id="@+id/panelAccounts" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
                     <Spinner android:id="@+id/accountSpinner" android:layout_width="match_parent" android:layout_height="54dp" />
                     <Button android:id="@+id/connectTikTok" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="ربط TikTok" />
                     <Button android:id="@+id/refreshAccounts" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="تحديث الحسابات" />
                 </LinearLayout>
 
-                <LinearLayout
-                    android:id="@+id/panelProof"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
-                    <Button android:id="@+id/testOnePost" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="اختبار منشور واحد (+10 دقائق)" />
-                    <Button android:id="@+id/checkLastPost" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="تحقق من آخر نتيجة" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/panelHistory"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
+                <LinearLayout android:id="@+id/panelHistory" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
                     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="12dp" android:text="هنا تظهر نتيجة آخر نشر وحالة الخطة." android:textColor="#FFFFFF" />
                     <Button android:id="@+id/historyRefresh" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="تحديث آخر نتيجة" />
                 </LinearLayout>
 
-                <LinearLayout
-                    android:id="@+id/panelConnection"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
+                <LinearLayout android:id="@+id/panelConnection" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
                     <EditText android:id="@+id/workerUrl" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="Worker URL — https://...workers.dev" android:inputType="textUri" android:textColor="#FFFFFF" android:textColorHint="#AAAAAA" />
                     <EditText android:id="@+id/pairToken" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="رمز الاقتران" android:inputType="textPassword" android:textColor="#FFFFFF" android:textColorHint="#AAAAAA" />
                     <Button android:id="@+id/saveSettings" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="حفظ الاتصال" />
                 </LinearLayout>
 
-                <ProgressBar
-                    android:id="@+id/progress"
-                    style="?android:attr/progressBarStyleHorizontal"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:max="100" />
-
-                <TextView
-                    android:id="@+id/status"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:padding="8dp"
-                    android:text="جاهز"
-                    android:textColor="#FFFFFF"
-                    android:textIsSelectable="true" />
+                <ProgressBar android:id="@+id/progress" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:max="100" />
+                <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:padding="8dp" android:text="جاهز" android:textColor="#FFFFFF" android:textIsSelectable="true" />
             </LinearLayout>
         </ScrollView>
     </FrameLayout>

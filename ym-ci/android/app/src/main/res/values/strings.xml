@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">YM</string>
+    <string name="accessibility_description">YM AUTO: تمرير تلقائي وتعليقات تلقائية داخل TikTok حسب إعداداتك.</string>
 </resources>
