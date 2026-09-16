@@ -1,7 +1,7 @@
 package com.ym.lite.automation
 
 object TikTokScope {
-    private val allowedPackages = setOf(
+    val allowedPackages: List<String> = listOf(
         "com.zhiliaoapp.musically",
         "com.ss.android.ugc.trill",
     )
