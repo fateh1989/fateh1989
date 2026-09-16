@@ -69,9 +69,9 @@ class ProfileActivity : AppCompatActivity() {
         body.addView(stats, matchWrap())
 
         body.addView(Button(this).apply {
-            text = "إدارة حساب TikTok"
+            text = "ربط / تحديث حساب TikTok"
             isAllCaps = false
-            setOnClickListener { startActivity(Intent(this@ProfileActivity, MainActivity::class.java)) }
+            setOnClickListener { startActivity(Intent(this@ProfileActivity, TikTokConnectActivity::class.java)) }
         }, matchWrap())
 
         body.addView(Button(this).apply {
@@ -81,7 +81,7 @@ class ProfileActivity : AppCompatActivity() {
         }, matchWrap())
 
         body.addView(TextView(this).apply {
-            text = "YM = Feed أولًا، والأدوات القوية خلفه عند الحاجة."
+            text = "YM = Feed أولًا، والحساب الحقيقي + المكتبة + AUTO خلفه."
             setTextColor(Color.GRAY)
             textSize = 14f
             gravity = Gravity.CENTER
@@ -96,10 +96,11 @@ class ProfileActivity : AppCompatActivity() {
     }
 
     private fun render() {
+        val connected = local.getBoolean("tiktok_connected", false)
         account.text = local.getString("selected_account_label", "@YM").orEmpty().ifBlank { "@YM" }
         val libraryCount = store.readUris().size
         val running = background.getBoolean("running", false)
-        stats.text = "$libraryCount فيديو في المكتبة   •   AUTO ${if (running) "يعمل" else "متوقف"}"
+        stats.text = "TikTok: ${if (connected) "متصل" else "غير متصل"}   •   $libraryCount فيديو   •   AUTO ${if (running) "يعمل" else "متوقف"}"
     }
 
     private fun matchWrap() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
