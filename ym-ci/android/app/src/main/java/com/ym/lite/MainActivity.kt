@@ -1,8 +1,10 @@
 package com.ym.lite
 
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.View
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,6 +17,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.abs
 
 class MainActivity : AppCompatActivity() {
     private lateinit var prefs: SecurePrefs
@@ -36,19 +39,53 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
 
+    private lateinit var feedVideo: VideoView
+    private lateinit var feedPlaceholder: TextView
+    private lateinit var feedAuthor: TextView
+    private lateinit var feedCaption: TextView
+    private lateinit var bubbleMenu: View
+    private lateinit var controlSheet: View
+    private lateinit var sheetTitle: TextView
+    private lateinit var likeButton: TextView
+    private lateinit var saveButton: TextView
+
+    private var currentFeedIndex = 0
+    private var touchDownY = 0f
+
     private val picker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         selected.clear()
         for (uri in uris) {
-            try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            try {
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (_: Exception) {
+            }
             selected += uri
         }
         videoCount.text = "${selected.size} فيديو"
+        if (selected.isNotEmpty()) {
+            currentFeedIndex = 0
+            playCurrentVideo()
+            closeSheet()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        window.statusBarColor = Color.BLACK
+        window.navigationBarColor = Color.BLACK
+
         prefs = SecurePrefs(this)
+        bindViews()
+        bindFeedControls()
+        bindAutomationControls()
+
+        workerUrl.setText(prefs.workerUrl())
+        pairToken.setText(if (prefs.token().isBlank()) "" else "••••••••")
+        progress.visibility = View.GONE
+    }
+
+    private fun bindViews() {
         workerUrl = findViewById(R.id.workerUrl)
         pairToken = findViewById(R.id.pairToken)
         accountSpinner = findViewById(R.id.accountSpinner)
@@ -60,11 +97,84 @@ class MainActivity : AppCompatActivity() {
         horizonDays = findViewById(R.id.horizonDays)
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
-        progress.visibility = View.GONE
 
-        workerUrl.setText(prefs.workerUrl())
-        pairToken.setText(if (prefs.token().isBlank()) "" else "••••••••")
+        feedVideo = findViewById(R.id.feedVideo)
+        feedPlaceholder = findViewById(R.id.feedPlaceholder)
+        feedAuthor = findViewById(R.id.feedAuthor)
+        feedCaption = findViewById(R.id.feedCaption)
+        bubbleMenu = findViewById(R.id.bubbleMenu)
+        controlSheet = findViewById(R.id.controlSheet)
+        sheetTitle = findViewById(R.id.sheetTitle)
+        likeButton = findViewById(R.id.likeButton)
+        saveButton = findViewById(R.id.saveButton)
+    }
 
+    private fun bindFeedControls() {
+        feedVideo.setOnPreparedListener { mediaPlayer ->
+            mediaPlayer.isLooping = true
+            feedVideo.start()
+        }
+        feedVideo.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    touchDownY = event.y
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    val delta = event.y - touchDownY
+                    if (abs(delta) > 100f) {
+                        if (delta < 0) nextVideo() else previousVideo()
+                    } else {
+                        if (feedVideo.isPlaying) feedVideo.pause() else feedVideo.start()
+                    }
+                    true
+                }
+                else -> true
+            }
+        }
+
+        findViewById<TextView>(R.id.plusButton).setOnClickListener {
+            if (controlSheet.visibility == View.VISIBLE) {
+                closeSheet()
+            }
+            bubbleMenu.visibility = if (bubbleMenu.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
+
+        findViewById<TextView>(R.id.bubbleWheel).setOnClickListener { openPanel(R.id.panelWheel, "الدولاب") }
+        findViewById<TextView>(R.id.bubbleSchedule).setOnClickListener { openPanel(R.id.panelSchedule, "الجدولة") }
+        findViewById<TextView>(R.id.bubbleAccounts).setOnClickListener { openPanel(R.id.panelAccounts, "الحسابات") }
+        findViewById<TextView>(R.id.bubbleProof).setOnClickListener { openPanel(R.id.panelProof, "اختبار النشر") }
+        findViewById<TextView>(R.id.bubbleHistory).setOnClickListener {
+            openPanel(R.id.panelHistory, "السجل")
+            checkLastPost()
+        }
+        findViewById<TextView>(R.id.bubbleSettings).setOnClickListener { openPanel(R.id.panelConnection, "الإعدادات") }
+        findViewById<TextView>(R.id.closeSheet).setOnClickListener { closeSheet() }
+
+        findViewById<TextView>(R.id.homeNav).setOnClickListener { closeSheet() }
+        findViewById<TextView>(R.id.historyNav).setOnClickListener {
+            openPanel(R.id.panelHistory, "السجل")
+            checkLastPost()
+        }
+        findViewById<TextView>(R.id.profileNav).setOnClickListener { openPanel(R.id.panelAccounts, "أنا / الحسابات") }
+        findViewById<TextView>(R.id.discoverNav).setOnClickListener {
+            Toast.makeText(this, "اكتشف ستكون شاشة المحتوى المقترح", Toast.LENGTH_SHORT).show()
+        }
+
+        findViewById<TextView>(R.id.profileBubble).setOnClickListener { openPanel(R.id.panelAccounts, "أنا / الحسابات") }
+        likeButton.setOnClickListener { toggleLike() }
+        saveButton.setOnClickListener { toggleSave() }
+        findViewById<TextView>(R.id.commentButton).setOnClickListener {
+            Toast.makeText(this, "التعليقات ستظهر فوق الفيديو في طبقة مستقلة", Toast.LENGTH_SHORT).show()
+        }
+        findViewById<TextView>(R.id.shareButton).setOnClickListener { shareCurrentVideo() }
+        findViewById<TextView>(R.id.forYouTab).setOnClickListener { closeSheet() }
+        findViewById<TextView>(R.id.followingTab).setOnClickListener {
+            Toast.makeText(this, "يتابع", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun bindAutomationControls() {
         findViewById<Button>(R.id.saveSettings).setOnClickListener {
             val oldToken = prefs.token()
             val typed = pairToken.text.toString()
@@ -78,7 +188,96 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.pickVideos).setOnClickListener { picker.launch(arrayOf("video/*")) }
         findViewById<Button>(R.id.testOnePost).setOnClickListener { scheduleProofPost() }
         findViewById<Button>(R.id.checkLastPost).setOnClickListener { checkLastPost() }
+        findViewById<Button>(R.id.historyRefresh).setOnClickListener { checkLastPost() }
         findViewById<Button>(R.id.createPlan).setOnClickListener { createCloudPlan() }
+    }
+
+    private fun openPanel(panelId: Int, title: String) {
+        intArrayOf(
+            R.id.panelWheel,
+            R.id.panelSchedule,
+            R.id.panelAccounts,
+            R.id.panelProof,
+            R.id.panelHistory,
+            R.id.panelConnection,
+        ).forEach { id -> findViewById<View>(id).visibility = if (id == panelId) View.VISIBLE else View.GONE }
+        sheetTitle.text = title
+        bubbleMenu.visibility = View.GONE
+        controlSheet.visibility = View.VISIBLE
+        if (feedVideo.isPlaying) feedVideo.pause()
+    }
+
+    private fun closeSheet() {
+        controlSheet.visibility = View.GONE
+        bubbleMenu.visibility = View.GONE
+        if (selected.isNotEmpty()) feedVideo.start()
+    }
+
+    private fun playCurrentVideo() {
+        if (selected.isEmpty()) {
+            feedPlaceholder.visibility = View.VISIBLE
+            return
+        }
+        currentFeedIndex = currentFeedIndex.coerceIn(0, selected.lastIndex)
+        feedPlaceholder.visibility = View.GONE
+        feedVideo.setVideoURI(selected[currentFeedIndex])
+        feedVideo.start()
+        updateFeedText()
+        updateLocalActions()
+    }
+
+    private fun nextVideo() {
+        if (selected.isEmpty()) return
+        currentFeedIndex = (currentFeedIndex + 1) % selected.size
+        playCurrentVideo()
+    }
+
+    private fun previousVideo() {
+        if (selected.isEmpty()) return
+        currentFeedIndex = if (currentFeedIndex == 0) selected.lastIndex else currentFeedIndex - 1
+        playCurrentVideo()
+    }
+
+    private fun updateFeedText() {
+        val account = accounts.getOrNull(accountSpinner.selectedItemPosition.coerceAtLeast(0))
+        feedAuthor.text = account?.label?.let { "@$it" } ?: "@YM"
+        val text = caption.text.toString().trim()
+        feedCaption.text = if (text.isBlank()) "فيديو ${currentFeedIndex + 1} من ${selected.size} • دولاب YM" else text
+    }
+
+    private fun toggleLike() {
+        if (selected.isEmpty()) return
+        val key = "liked_$currentFeedIndex"
+        localPrefs.edit().putBoolean(key, !localPrefs.getBoolean(key, false)).apply()
+        updateLocalActions()
+    }
+
+    private fun toggleSave() {
+        if (selected.isEmpty()) return
+        val key = "saved_$currentFeedIndex"
+        localPrefs.edit().putBoolean(key, !localPrefs.getBoolean(key, false)).apply()
+        updateLocalActions()
+    }
+
+    private fun updateLocalActions() {
+        val liked = localPrefs.getBoolean("liked_$currentFeedIndex", false)
+        val saved = localPrefs.getBoolean("saved_$currentFeedIndex", false)
+        likeButton.text = if (liked) "♥\n1" else "♡\n0"
+        saveButton.text = if (saved) "★\nحفظ" else "☆\nحفظ"
+    }
+
+    private fun shareCurrentVideo() {
+        val uri = selected.getOrNull(currentFeedIndex)
+        if (uri == null) {
+            Toast.makeText(this, "اختر فيديو أولًا", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = contentResolver.getType(uri) ?: "video/*"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, "مشاركة الفيديو"))
     }
 
     private fun client(): YmRelayClient {
@@ -96,9 +295,14 @@ class MainActivity : AppCompatActivity() {
         }
         progress.visibility = View.VISIBLE
         executor.execute {
-            try { block() }
-            catch (e: Exception) { runOnUiThread { setStatus("خطأ: ${e.message}") } }
-            finally { busy.set(false); runOnUiThread { progress.visibility = View.GONE } }
+            try {
+                block()
+            } catch (e: Exception) {
+                runOnUiThread { setStatus("خطأ: ${e.message}") }
+            } finally {
+                busy.set(false)
+                runOnUiThread { progress.visibility = View.GONE }
+            }
         }
     }
 
@@ -115,6 +319,7 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             accounts = loaded
             accountSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, loaded.map { it.label })
+            updateFeedText()
             setStatus(if (loaded.isEmpty()) "لم يظهر حساب متصل بعد" else "تم العثور على ${loaded.size} حساب")
         }
     }
@@ -138,10 +343,12 @@ class MainActivity : AppCompatActivity() {
                 val postId = api.createScheduledPost(account.id, text, upload.mediaUrl, scheduled)
                 localPrefs.edit().putString("last_post_id", postId).apply()
                 runOnUiThread {
-                    setStatus("تمت جدولة منشور الاختبار بعد 10 دقائق. رقم العملية: $postId. يمكنك الآن إطفاء الهاتف، ثم العودة لاحقًا والضغط على تحقق من آخر نتيجة.")
+                    setStatus("تمت جدولة منشور الاختبار بعد 10 دقائق. رقم العملية: $postId")
                 }
             }
-        } catch (e: Exception) { setStatus("خطأ: ${e.message}") }
+        } catch (e: Exception) {
+            setStatus("خطأ: ${e.message}")
+        }
     }
 
     private fun checkLastPost() {
@@ -208,13 +415,36 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 runOnUiThread {
-                    setStatus("تمت جدولة ${plan.size} منشورًا في السحابة. يمكنك الآن إطفاء الهاتف؛ هذه الخطة لا تعتمد عليه.")
+                    setStatus("تمت جدولة ${plan.size} منشورًا في السحابة. يمكنك الآن إطفاء الهاتف.")
                 }
             }
-        } catch (e: Exception) { setStatus("خطأ: ${e.message}") }
+        } catch (e: Exception) {
+            setStatus("خطأ: ${e.message}")
+        }
     }
 
-    private fun setStatus(text: String) { status.text = text }
+    private fun setStatus(text: String) {
+        status.text = text
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        when {
+            controlSheet.visibility == View.VISIBLE -> closeSheet()
+            bubbleMenu.visibility == View.VISIBLE -> bubbleMenu.visibility = View.GONE
+            else -> super.onBackPressed()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (feedVideo.isPlaying) feedVideo.pause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (selected.isNotEmpty() && controlSheet.visibility != View.VISIBLE) feedVideo.start()
+    }
 
     override fun onDestroy() {
         super.onDestroy()
