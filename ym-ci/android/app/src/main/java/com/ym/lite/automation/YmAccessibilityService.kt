@@ -2,6 +2,7 @@ package com.ym.lite.automation
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Path
 import android.graphics.PixelFormat
@@ -10,10 +11,13 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.LinearLayout
 import android.widget.TextView
+import com.ym.lite.MainActivity
 import kotlin.math.roundToInt
 
 class YmAccessibilityService : AccessibilityService() {
@@ -25,7 +29,11 @@ class YmAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private val prefs by lazy { getSharedPreferences("ym_auto", MODE_PRIVATE) }
     private var activePackage = ""
-    private var overlay: TextView? = null
+    private var overlayRoot: LinearLayout? = null
+    private var overlayMenu: LinearLayout? = null
+    private var mainBubble: TextView? = null
+    private var autoBubble: TextView? = null
+    private var commentBubble: TextView? = null
     private var scrollCount = 0
     private var commentIndex = 0
 
@@ -83,9 +91,7 @@ class YmAccessibilityService : AccessibilityService() {
 
         val shouldComment = autoComment && comments.isNotEmpty() && ((scrollCount + 1) % commentEvery == 0)
         if (shouldComment) {
-            attemptComment {
-                handler.postDelayed({ swipeAndContinue() }, 700)
-            }
+            attemptComment { handler.postDelayed({ swipeAndContinue() }, 700) }
         } else {
             swipeAndContinue()
         }
@@ -131,7 +137,11 @@ class YmAccessibilityService : AccessibilityService() {
 
         handler.postDelayed({
             val newRoot = rootInActiveWindow
-            val editor = newRoot?.let { findNode(it) { node -> node.isEditable || node.className?.toString()?.contains("EditText") == true } }
+            val editor = newRoot?.let {
+                findNode(it) { node ->
+                    node.isEditable || node.className?.toString()?.contains("EditText") == true
+                }
+            }
             if (editor == null) {
                 performGlobalAction(GLOBAL_ACTION_BACK)
                 done()
@@ -147,10 +157,13 @@ class YmAccessibilityService : AccessibilityService() {
 
             handler.postDelayed({
                 val sendRoot = rootInActiveWindow
-                val send = sendRoot?.let { findNode(it) { node ->
-                    val label = nodeLabel(node)
-                    label == "send" || label.contains("post") || label.contains("إرسال") || label.contains("نشر") || label.contains("skicka")
-                } }
+                val send = sendRoot?.let {
+                    findNode(it) { node ->
+                        val label = nodeLabel(node)
+                        label == "send" || label.contains("post") || label.contains("إرسال") ||
+                            label.contains("نشر") || label.contains("skicka")
+                    }
+                }
                 if (clickNode(send)) {
                     commentIndex++
                     handler.postDelayed({
@@ -165,7 +178,10 @@ class YmAccessibilityService : AccessibilityService() {
         }, 750)
     }
 
-    private fun findNode(root: AccessibilityNodeInfo, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
+    private fun findNode(
+        root: AccessibilityNodeInfo,
+        predicate: (AccessibilityNodeInfo) -> Boolean,
+    ): AccessibilityNodeInfo? {
         if (predicate(root)) return root
         for (i in 0 until root.childCount) {
             val child = root.getChild(i) ?: continue
@@ -175,10 +191,9 @@ class YmAccessibilityService : AccessibilityService() {
         return null
     }
 
-    private fun nodeLabel(node: AccessibilityNodeInfo): String {
-        return listOfNotNull(node.text, node.contentDescription)
+    private fun nodeLabel(node: AccessibilityNodeInfo): String =
+        listOfNotNull(node.text, node.contentDescription)
             .joinToString(" ").lowercase().trim()
-    }
 
     private fun clickNode(node: AccessibilityNodeInfo?): Boolean {
         var current = node ?: return false
@@ -189,9 +204,8 @@ class YmAccessibilityService : AccessibilityService() {
         return false
     }
 
-    private fun isTikTokPackage(packageName: String?): Boolean {
-        return packageName == "com.zhiliaoapp.musically" || packageName == "com.ss.android.ugc.trill"
-    }
+    private fun isTikTokPackage(packageName: String?): Boolean =
+        packageName == "com.zhiliaoapp.musically" || packageName == "com.ss.android.ugc.trill"
 
     private fun isTikTokActive(): Boolean {
         val rootPackage = rootInActiveWindow?.packageName?.toString()
@@ -202,29 +216,70 @@ class YmAccessibilityService : AccessibilityService() {
         if (isTikTokActive()) ensureOverlay() else removeOverlay()
     }
 
+    private fun bubble(label: String, accent: Int, onClick: () -> Unit): TextView {
+        val density = resources.displayMetrics.density
+        return TextView(this).apply {
+            text = label
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            textSize = 11f
+            minWidth = (54 * density).roundToInt()
+            minHeight = (44 * density).roundToInt()
+            setPadding((8 * density).roundToInt(), (7 * density).roundToInt(), (8 * density).roundToInt(), (7 * density).roundToInt())
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 22 * density
+                setColor(Color.argb(225, 12, 12, 12))
+                setStroke((2 * density).roundToInt(), accent)
+            }
+            setOnClickListener { onClick() }
+        }
+    }
+
     private fun ensureOverlay() {
-        if (overlay != null) {
+        if (overlayRoot != null) {
             updateOverlayText()
             return
         }
-        val wm = getSystemService(WINDOW_SERVICE) as WindowManager
+
         val density = resources.displayMetrics.density
-        val button = TextView(this).apply {
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            textSize = 12f
-            setPadding((12 * density).roundToInt(), (9 * density).roundToInt(), (12 * density).roundToInt(), (9 * density).roundToInt())
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.argb(220, 15, 15, 15))
-                setStroke((2 * density).roundToInt(), Color.rgb(254, 44, 85))
-            }
-            setOnClickListener {
-                val newValue = !prefs.getBoolean("auto_enabled", false)
-                prefs.edit().putBoolean("auto_enabled", newValue).apply()
-                reloadFromPrefs()
-            }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.END
         }
+        val menu = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.END
+            visibility = View.GONE
+        }
+
+        autoBubble = bubble("AUTO", Color.rgb(37, 244, 238)) {
+            val value = !prefs.getBoolean("auto_enabled", false)
+            prefs.edit().putBoolean("auto_enabled", value).apply()
+            reloadFromPrefs()
+        }.also { menu.addView(it) }
+
+        commentBubble = bubble("تعليق", Color.rgb(254, 44, 85)) {
+            val value = !prefs.getBoolean("auto_comment", false)
+            prefs.edit().putBoolean("auto_comment", value).apply()
+            reloadFromPrefs()
+        }.also { menu.addView(it) }
+
+        menu.addView(bubble("ضبط", Color.WHITE) {
+            removeOverlay()
+            startActivity(
+                Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        })
+
+        mainBubble = bubble("YM", Color.rgb(254, 44, 85)) {
+            menu.visibility = if (menu.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
+
+        root.addView(menu)
+        root.addView(mainBubble)
+
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -233,20 +288,28 @@ class YmAccessibilityService : AccessibilityService() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            x = (10 * density).roundToInt()
+            x = (8 * density).roundToInt()
         }
-        wm.addView(button, lp)
-        overlay = button
+
+        (getSystemService(WINDOW_SERVICE) as WindowManager).addView(root, lp)
+        overlayRoot = root
+        overlayMenu = menu
         updateOverlayText()
     }
 
     private fun updateOverlayText() {
-        overlay?.text = if (prefs.getBoolean("auto_enabled", false)) "AUTO\n● $scrollCount" else "AUTO\n○"
+        mainBubble?.text = if (prefs.getBoolean("auto_enabled", false)) "YM\n● $scrollCount" else "YM\n○"
+        autoBubble?.text = if (prefs.getBoolean("auto_enabled", false)) "AUTO ●" else "AUTO ○"
+        commentBubble?.text = if (prefs.getBoolean("auto_comment", false)) "تعليق ●" else "تعليق ○"
     }
 
     private fun removeOverlay() {
-        val view = overlay ?: return
+        val view = overlayRoot ?: return
         runCatching { (getSystemService(WINDOW_SERVICE) as WindowManager).removeView(view) }
-        overlay = null
+        overlayRoot = null
+        overlayMenu = null
+        mainBubble = null
+        autoBubble = null
+        commentBubble = null
     }
 }
