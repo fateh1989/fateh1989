@@ -7,4 +7,4 @@
     android:canRetrieveWindowContent="true"
     android:description="@string/accessibility_description"
     android:notificationTimeout="80"
-    android:packageNames="com.zhiliaoapp.musically,com.ss.android.ugc.trill" />
+    android:packageNames="com.zhiliaoapp.musically,com.ss.android.ugc.trill,com.tiktok.lite.go,com.zhiliaoapp.musically.go" />
