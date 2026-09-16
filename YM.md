@@ -39,11 +39,24 @@ YM uses **plan-ahead scheduling**, not Android wakeups.
 
 Example: 2 posts/day for 30 days -> Android creates 60 future scheduled cloud posts in one planning session. After all jobs are accepted, those jobs no longer depend on the phone.
 
-## Current source
+## Current source and build
 
-Canonical bundle in ChatGPT Library:
+Canonical source bundle in ChatGPT Library:
 
 `/Projects/YM/YM-Lite-v0.6.zip`
+
+First compiled Android artifact:
+
+`/Projects/YM/YM-v0.6-debug.apk`
+
+Build provenance:
+- GitHub Actions run: `35046059180`.
+- Android unit tests: passed.
+- `assembleDebug`: passed.
+- APK size: 5,956,422 bytes.
+- APK SHA-256: `15766fadf9ce02239e75b6e34293d44bc098a344aa0e9703ecc67fd207deff44`.
+- APK archive integrity: passed.
+- Real-device install/launch: not yet verified because the connected Android device was offline during this build session.
 
 Also read:
 - `/Projects/YM/README.md`
@@ -98,8 +111,10 @@ Security design:
 - Worker unit tests: **8/8 passed** using mocked provider calls.
 - `PlanEngine.kt` compiled with `kotlinc`.
 - Planner smoke: **OK (60 slots)**, deterministic, chronological, overnight-window capable and no immediate repeat with a multi-item pool.
-- Android APK itself has **not** yet been compiled in the current container because Android SDK/Gradle are unavailable there.
-- A Remote Desktop Commander build-environment check was attempted, but the device was offline at that moment; no device build was claimed.
+- Android unit tests passed in GitHub Actions run `35046059180`.
+- Android `assembleDebug` passed and produced the APK stored in `/Projects/YM/YM-v0.6-debug.apk`.
+- APK compressed-data integrity check passed and the package contains an APK Signing Block.
+- Real-device install/launch is still pending because Remote Desktop Commander reported the device offline.
 - No real Post for Me key, Cloudflare deployment, TikTok account or public post has been used yet.
 
 ## Provider facts re-checked 2026-09-16
@@ -118,13 +133,14 @@ Re-check these live before changing integration because provider behavior can ch
 ## Mandatory one-account proof gate
 
 Before a month-long plan or accounts 2/3 are used:
-1. connect one TikTok account;
-2. select one video;
-3. schedule one public/non-draft cloud post;
-4. power the phone off before the scheduled time if desired;
-5. return later and query the provider result;
-6. require provider success and a platform URL;
-7. verify the resulting TikTok post is actually public.
+1. install and launch the built APK on the Android device;
+2. connect one TikTok account;
+3. select one video;
+4. schedule one public/non-draft cloud post;
+5. power the phone off before the scheduled time if desired;
+6. return later and query the provider result;
+7. require provider success and a platform URL;
+8. verify the resulting TikTok post is actually public.
 
 Only then use the 30-day wheel.
 
@@ -142,15 +158,15 @@ Outbound automated comments on other creators' videos remain unimplemented; no s
 When the user says `اكمل YM` or `اكمل يم`:
 1. Read this file.
 2. Read `/Projects/YM/STATE.md`.
-3. Inspect the latest `/Projects/YM/YM-Lite-v0.6.zip` or newer bundle.
+3. Inspect `/Projects/YM/YM-Lite-v0.6.zip` and the compiled `/Projects/YM/YM-v0.6-debug.apk` or any newer artifacts.
 4. Do not rebuild from scratch.
 5. Keep YM small and resist unnecessary infrastructure.
-6. Test every meaningful change and distinguish source-written, core-tested, APK-built, provider-tested and real TikTok-verified states.
+6. Test every meaningful change and distinguish source-written, core-tested, APK-built, device-tested, provider-tested and real TikTok-verified states.
 7. Update this handoff and `STATE.md` after every durable milestone.
 
 ## Next milestones
 
-1. Compile the first Android APK in an Android-capable build environment.
+1. Install and launch the compiled APK on the Android device and perform UI/network smoke QA.
 2. Create/connect a Post for Me Quickstart project.
 3. Deploy the tiny Cloudflare Worker and set `POST_FOR_ME_API_KEY` + `YM_CLIENT_TOKEN` as encrypted secrets.
 4. Configure the Quickstart redirect URL to Worker `/oauth-done`.
