@@ -1,117 +1,108 @@
 # YM / يم — Canonical Project Handoff
 
-Read this file first when continuing YM, then read the latest `/Projects/YM/STATE.md` from ChatGPT Library.
+## Current continuation point
+- Product: **YM / يم**, separate from RUN.
+- Repository: `fateh1989/fateh1989`.
+- Current source branch: `ym-v0.19-safe-tiktok-auto`.
+- Current built head: `22a83dcd684497b6eb1cb9beee88b00b6a9c07bf`.
+- Android package: `com.ym.lite.stable`.
+- Version: **0.19.0**, versionCode **19**.
+- GitHub Actions run: **35149961240** / run number **48** — success.
+- Artifact: `YM-v0.19-safe-tiktok-auto-apk`.
+- APK SHA-256: `7cf3123b3dba33fd580415124b63316ff604e1a5f5d687feeff846ccc85e5765`.
+- APK size: `9,688,303` bytes.
 
-## Product identity
-- Name: **YM / يم**.
-- Separate from RUN.
-- Android product centered on a TikTok-like short-form video experience.
-- Maximum 3 TikTok accounts for the cloud scheduling side.
-- YM must feel like a video app first, never a settings dashboard.
-
-## Locked UX
-The home screen keeps the approved current-TikTok-inspired layout:
-- full-screen vertical video;
+## Locked product direction
+YM must feel like a modern TikTok-style video app first, not a settings dashboard. Preserve:
+- full-screen vertical video feed;
 - swipe up/down;
-- top feed tabs;
-- right action rail;
-- bottom navigation;
-- center `+` button;
-- no more than six bubbles above `+`.
+- current-TikTok-inspired top tabs/right rail/bottom navigation;
+- AUTO as a primary control;
+- library/wheel, publishing scheduler, accounts, history and settings as secondary controls;
+- up to 3 TikTok accounts on the cloud publishing side.
 
-Current bubbles: **AUTO، الدولاب، الجدولة، الحسابات، السجل، الإعدادات**. AUTO is the primary control.
+Do not rebuild YM from scratch.
 
-## Current source — v0.10 scope guard
-Current repository: `fateh1989/fateh1989`.
-Current branch: `ym-v0.10-scope-guard`.
-Current commit: `dd1b262f8e1970a57b2795178ef5711908a58a21`.
-Package: `com.ym.lite.stable`.
-Version: `0.10.0` / versionCode `10`.
+## v0.18 baseline retained
+v0.19 continues the v0.18 player/feed work:
+- Media3 ExoPlayer full-screen playback;
+- manual vertical navigation;
+- playback pause/resume;
+- like/save local state;
+- comment panel;
+- share action;
+- persisted local video library/wheel;
+- publishing/cloud pieces remain separate from feed automation.
 
-v0.10 continues the functional v0.9 feed and fixes the real-device AUTO escape defect reported by the user: after TikTok had been active, the Accessibility service could retain the last TikTok package state and later dispatch a global swipe while another app such as ChatGPT was on screen.
+## v0.19 safe TikTok AUTO
+v0.19 restores a real TikTok Accessibility AUTO layer but strictly scopes every external action to the active TikTok window.
 
-### v0.10 TikTok scope guard
-- AUTO no longer trusts a remembered/last package name.
-- Every swipe checks `rootInActiveWindow` at the exact action point and requires a TikTok package.
-- Every comment click, editor action, send action and automatic Back action is re-checked against the active TikTok window.
-- A 250 ms scope guard removes/hides the floating overlay when TikTok is not the active window.
-- Allowed automation packages are centralized in `TikTokScope`: `com.zhiliaoapp.musically` and `com.ss.android.ugc.trill` only.
-- Unit coverage explicitly rejects `com.openai.chatgpt`, Android Settings and null package names.
-- Leaving TikTok pauses external AUTO actions; returning to TikTok can resume while master AUTO remains enabled.
+### Strict scope
+Central allow-list in `TikTokScope`:
+- `com.zhiliaoapp.musically`
+- `com.ss.android.ugc.trill`
 
-## Functional feed retained from v0.9
-- Persisted local video wheel using Storage Access Framework URI grants.
-- Empty feed opens the video picker.
-- Selected local videos play full-screen.
-- Manual swipe changes video.
-- YM feed AUTO advances videos at a configurable 3–120 second interval.
-- Wheel wraps in both directions.
-- Caption, daily quantity, time window, horizon and wheel position persist locally.
-- Long-press AUTO opens detailed settings.
-- Cloud scheduling remains behind the feature bubbles.
+The unit test explicitly rejects:
+- `com.openai.chatgpt`
+- `com.android.settings`
+- `com.google.android.youtube`
+- null package names.
 
-## AUTO architecture
-There are two distinct AUTO paths:
-1. **YM feed AUTO** — advances through the local wheel while YM itself is open.
-2. **TikTok AUTO** — AccessibilityService controls only the currently active real TikTok window, with upward swipes and optional comments from the user's pool.
+### Runtime guard
+`YmTikTokAccessibilityService`:
+- obtains `rootInActiveWindow` at the point of action;
+- swipes only when the current root belongs to an allowed TikTok package;
+- re-checks TikTok before comment-button click, editor text insertion, send click and Back;
+- removes its AUTO accessibility overlay outside TikTok using a 250 ms scope watcher;
+- if TikTok is not active, external AUTO waits and does not dispatch a global gesture;
+- returning to TikTok can resume while master AUTO remains enabled.
 
-The floating AUTO accessibility overlay is available over TikTok only.
+### Android registration restored
+v0.19 registers the service in `AndroidManifest.xml` with `BIND_ACCESSIBILITY_SERVICE` and `@xml/ym_accessibility_service`. The service configuration itself also limits accessibility events to the two allowed TikTok packages.
 
-## Cloud publishing architecture
-`Android YM -> tiny Cloudflare Worker relay -> Post for Me Quickstart -> TikTok`
+### TikTok AUTO control screen
+`TikTokAutoActivity` now provides:
+- AUTO on/off;
+- swipe interval 3–120 seconds;
+- optional automatic comments;
+- comment frequency;
+- local comment pool;
+- direct Accessibility settings button;
+- real TikTok launcher;
+- pending-start flow: after the user enables YM Accessibility and returns, TikTok is opened and AUTO is armed.
 
-This is separate from feed/TikTok AUTO. The Worker protects provider credentials and exposes a narrow allow-list. Plan-ahead scheduling is used for future publishing when the phone is off.
+The existing YM AUTO hub links to this TikTok AUTO screen while keeping cloud publishing AUTO separate.
 
-## Verification
-### Existing core
-- Worker syntax check: passed.
-- Worker tests: **8/8 passed**.
-- Planner compile/smoke: passed.
+## Build verification
+GitHub Actions run `35149961240`:
+- relay JavaScript syntax: passed;
+- Android unit tests: passed;
+- strict TikTok scope test: passed;
+- `assembleDebug`: passed;
+- APK upload: passed.
 
-### Previous device proof
-- v0.6 installed/launched successfully.
-- v0.8 rendered the approved TikTok-like visual direction.
-- Real-device testing exposed the external AUTO escape defect: gestures could continue after leaving TikTok.
+CI proves build/test behavior only. It does **not** prove the installed TikTok UI selectors or Accessibility behavior on the user's device.
 
-### v0.10
-- GitHub Actions run: `35099490504` — **success**.
-- Unit tests: **passed**.
-- Scope test rejects ChatGPT/non-TikTok packages: **passed**.
-- `assembleDebug`: **passed**.
-- Artifact upload: **passed**.
-- APK: `/Projects/YM/YM-v0.10-scope-guard.apk`.
-- APK size: `5,990,976` bytes.
-- APK SHA-256: `30137481be8bd35521fe1a648215460f9d51f7665c93bfe55a249d4896fdcc14`.
-- ZIP/APK compressed-data integrity: passed.
-- APK Signing Block present.
-- Real-device v0.10 scope-guard proof: **pending**.
-- Real TikTok auto-scroll/comment proof after the guard: **pending**.
-- Worker connectivity and real public provider publishing: pending.
+## Real-device verification still required
+1. Install YM v0.19.
+2. Open `AUTO -> TikTok AUTO`.
+3. Open Accessibility settings and enable **YM Automation**.
+4. Start TikTok AUTO with automatic comments OFF.
+5. Verify automatic vertical swipes in real TikTok.
+6. Leave TikTok while AUTO remains enabled and open ChatGPT or Android Settings.
+7. Verify **zero YM swipes/actions and no YM AUTO overlay outside TikTok**.
+8. Return to TikTok and verify AUTO resumes only there.
+9. Then enable one automatic comment and verify TikTok's current comment/editor/send selectors.
+10. Keep cloud TikTok account linking/publishing verification separate from Accessibility AUTO.
 
-## Durable files
-- `/Projects/YM/STATE.md` — latest state.
-- `/Projects/YM/YM-v0.10-scope-guard.apk` — current APK.
-- `/Projects/YM/YM-v0.9-functional.apk` — previous functional-feed APK.
-- `/Projects/YM/YM-v0.8-parallel-debug.apk` — previous visual prototype.
-- `/Projects/YM/ARCHITECTURE.md` — provider architecture decision.
-
-## Next real-device proof
-1. Install/update to v0.10 (`com.ym.lite.stable`).
-2. Enable YM Accessibility service.
-3. Start TikTok AUTO with comments OFF.
-4. Confirm one or more automatic swipes inside TikTok.
-5. While AUTO is still enabled, switch to ChatGPT or Android Settings and confirm there are **zero** YM swipes and no AUTO overlay outside TikTok.
-6. Return to TikTok and confirm AUTO resumes only there.
-7. Then enable one automatic comment and tune selectors if required for the installed TikTok language/version.
-8. Separately verify the YM local feed/wheel persistence and cloud provider path.
+## Known verification boundary
+Do not claim real TikTok AUTO success, comment success, provider OAuth success or public publishing success until each is actually tested on the device/provider.
 
 ## Continuation rule
 When the user says `اكمل YM` or `اكمل يم`:
-1. read this file;
-2. read `/Projects/YM/STATE.md`;
-3. inspect branch `ym-v0.10-scope-guard` and `/Projects/YM/YM-v0.10-scope-guard.apk` or newer;
-4. do **not** rebuild from scratch;
-5. preserve the approved video-first UI and six-bubble limit;
-6. keep AUTO as the primary control;
-7. never allow TikTok AUTO gestures/actions based on stale package state;
-8. distinguish CI-built from real-device-tested, TikTok-AUTO-tested and provider-verified states.
+1. start from branch `ym-v0.19-safe-tiktok-auto` or a newer YM branch;
+2. do not return to v0.10/v0.18 unless diagnosing a regression;
+3. preserve the video-first UI;
+4. preserve strict current-window TikTok scope for every Accessibility action;
+5. never allow global gestures/actions based on stale remembered package state;
+6. distinguish CI-built from device-tested and provider-verified status.
