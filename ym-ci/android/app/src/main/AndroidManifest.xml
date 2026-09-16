@@ -9,13 +9,29 @@
         android:theme="@style/Theme.YM">
 
         <activity
-            android:name="com.ym.lite.FeedActivity"
+            android:name="com.ym.lite.LibraryActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name="com.ym.lite.AutoActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name="com.ym.lite.ProfileActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
 
         <activity
             android:name="com.ym.lite.MainActivity"
-            android:exported="true">
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name="com.ym.lite.FeedActivity"
+            android:exported="true"
+            android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
