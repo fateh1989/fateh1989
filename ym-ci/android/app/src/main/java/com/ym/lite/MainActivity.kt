@@ -2,6 +2,7 @@ package com.ym.lite
 
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
@@ -27,6 +28,7 @@ import com.ym.lite.net.YmRelayClient
 import com.ym.lite.security.SecurePrefs
 import org.json.JSONArray
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -34,6 +36,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var securePrefs: SecurePrefs
     private val localPrefs by lazy { getSharedPreferences("ym_local", MODE_PRIVATE) }
     private val backgroundPrefs by lazy { getSharedPreferences("ym_background", MODE_PRIVATE) }
+    private val runPrefs by lazy { getSharedPreferences("ym_runs", MODE_PRIVATE) }
     private val executor = Executors.newSingleThreadExecutor()
     private val busy = AtomicBoolean(false)
 
@@ -56,6 +59,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var pairToken: EditText
     private lateinit var status: TextView
     private lateinit var autoState: TextView
+    private lateinit var planSummary: TextView
     private lateinit var progress: ProgressBar
 
     private val picker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -98,15 +102,20 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
             textSize = 34f
             gravity = Gravity.CENTER
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTypeface(typeface, Typeface.BOLD)
         })
         root.addView(TextView(this).apply {
-            text = "مدير TikTok مستقل • مكتبة • دولاب نشر • AUTO خلفي"
+            text = "مشاهدة • مكتبة • دولاب نشر • AUTO خلفي"
             setTextColor(Color.rgb(190, 190, 190))
             textSize = 15f
             gravity = Gravity.CENTER
             setPadding(0, dp(4), 0, dp(14))
         })
+
+        val watchCard = card("المشاهدة")
+        watchCard.addView(label("افتح مكتبة YM بوضع فيديو ملء الشاشة، واسحب للأعلى والأسفل مثل تطبيق فيديو قصير."))
+        watchCard.addView(actionButton("فتح وضع المشاهدة") { openFeed() }, matchWrap())
+        root.addView(watchCard)
 
         val accountCard = card("الحساب")
         accountSpinner = Spinner(this)
@@ -119,7 +128,7 @@ class MainActivity : AppCompatActivity() {
 
         val libraryCard = card("مكتبة الفيديوهات")
         videoView = VideoView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(460))
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(430))
             setBackgroundColor(Color.rgb(8, 8, 8))
             setOnPreparedListener { mp -> mp.isLooping = true; start() }
         }
@@ -139,12 +148,13 @@ class MainActivity : AppCompatActivity() {
             actionButton("إضافة فيديوهات") { picker.launch(arrayOf("video/*")) },
             actionButton("التالي") { nextPreview() },
         ))
+        libraryCard.addView(actionButton("مسح المكتبة") { clearLibrary() }, matchWrap())
         caption = field("النص الافتراضي للمنشور", false)
         libraryCard.addView(caption)
         root.addView(libraryCard)
 
         val publishCard = card("دولاب النشر")
-        publishCard.addView(label("YM يختار من المكتبة فقط، يوزع المقاطع على الأيام والأوقات، ويتجنب التكرار المباشر."))
+        publishCard.addView(label("YM يختار من المكتبة فقط، يوزع المقاطع على الأيام والأوقات، ويحفظ نسخة ثابتة من الخطة عند تشغيل AUTO."))
         dailyCount = numberField("عدد المنشورات يوميًا", "1")
         windowStart = field("بداية نافذة النشر HH:mm", true).apply { setText("18:00") }
         windowEnd = field("نهاية نافذة النشر HH:mm", true).apply { setText("23:00") }
@@ -160,7 +170,7 @@ class MainActivity : AppCompatActivity() {
         root.addView(publishCard)
 
         val commentCard = card("دولاب التعليقات")
-        commentCard.addView(label("كل سطر تعليق مستقل. الدولاب يدور بينها داخل YM ويمكنك مراجعة التعليق التالي قبل استخدامه."))
+        commentCard.addView(label("كل سطر تعليق مستقل. في وضع المشاهدة يعرض YM تعليقًا مقترحًا لكل فيديو ويمكن نسخه بضغطة."))
         commentPool = field("اكتب التعليقات، كل تعليق في سطر", false).apply {
             minLines = 5
             gravity = Gravity.TOP or Gravity.START
@@ -174,11 +184,11 @@ class MainActivity : AppCompatActivity() {
         root.addView(commentCard)
 
         val autoCard = card("AUTO — يعمل بعد إغلاق YM")
-        autoCard.addView(label("عند التشغيل، YM يجهز ويرسل خطة النشر في الخلفية. بعد تسليم الخطة يمكنك إغلاق التطبيق؛ المنشورات المجدولة لا تعتمد على بقاء الشاشة مفتوحة."))
+        autoCard.addView(label("عند التشغيل، YM يصنع لقطة ثابتة من الحساب والمكتبة والإعدادات، ثم يرفع الوسائط ويسلم خطة النشر في الخلفية. تغيير الإعدادات بعد التشغيل لا يغيّر الخطة الجارية."))
         autoState = label("AUTO متوقف").apply {
             setTextColor(Color.rgb(37, 244, 238))
             textSize = 17f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTypeface(typeface, Typeface.BOLD)
         }
         autoCard.addView(autoState)
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -188,6 +198,8 @@ class MainActivity : AppCompatActivity() {
         autoCard.addView(progress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(16)).apply {
             setMargins(0, dp(8), 0, dp(8))
         })
+        planSummary = label("لا توجد خطة نشطة")
+        autoCard.addView(planSummary)
         autoCard.addView(row(
             actionButton("تشغيل AUTO") { startBackgroundPlan() },
             actionButton("إيقاف") { stopBackgroundPlan() },
@@ -197,7 +209,10 @@ class MainActivity : AppCompatActivity() {
         val historyCard = card("السجل")
         status = label("جاهز")
         historyCard.addView(status)
-        historyCard.addView(actionButton("تحديث آخر نتيجة") { checkLastPost() }, matchWrap())
+        historyCard.addView(row(
+            actionButton("تحديث آخر نتيجة") { checkLastPost() },
+            actionButton("تحديث حالة AUTO") { renderPlanSummary() },
+        ))
         root.addView(historyCard)
 
         val settingsCard = card("الاتصال")
@@ -209,7 +224,7 @@ class MainActivity : AppCompatActivity() {
         root.addView(settingsCard)
 
         root.addView(TextView(this).apply {
-            text = "YM v0.13 • التطبيق مستقل عن واجهة TikTok الأصلية"
+            text = "YM v0.14 • التطبيق مستقل عن واجهة TikTok الأصلية"
             setTextColor(Color.DKGRAY)
             gravity = Gravity.CENTER
             setPadding(0, dp(18), 0, 0)
@@ -230,6 +245,7 @@ class MainActivity : AppCompatActivity() {
         restoreLibrary()
         renderLibrary()
         renderAutoState()
+        renderPlanSummary()
         val last = backgroundPrefs.getString("last_status", "").orEmpty()
         if (last.isNotBlank()) status.text = last
     }
@@ -260,7 +276,7 @@ class MainActivity : AppCompatActivity() {
     private fun renderLibrary() {
         videoCount.text = "${selected.size} فيديو في مكتبة YM"
         if (selected.isEmpty()) {
-            videoView.stopPlayback()
+            if (::videoView.isInitialized) videoView.stopPlayback()
             videoView.visibility = View.GONE
             videoPlaceholder.visibility = View.VISIBLE
             return
@@ -288,6 +304,23 @@ class MainActivity : AppCompatActivity() {
         if (selected.isEmpty()) return
         previewIndex = if (previewIndex == 0) selected.lastIndex else previewIndex - 1
         renderLibrary()
+    }
+
+    private fun clearLibrary() {
+        selected.clear()
+        previewIndex = 0
+        persistLibrary()
+        renderLibrary()
+        setStatus("تم مسح مكتبة YM المحلية")
+    }
+
+    private fun openFeed() {
+        saveProductState()
+        if (selected.isEmpty()) {
+            setStatus("أضف فيديوهات إلى المكتبة أولًا")
+            return
+        }
+        startActivity(Intent(this, FeedActivity::class.java))
     }
 
     private fun saveConnection() {
@@ -421,33 +454,66 @@ class MainActivity : AppCompatActivity() {
             setStatus("مكتبة الفيديوهات فارغة")
             return
         }
-        if (localPrefs.getString("selected_account_id", "").isNullOrBlank()) {
+        val accountId = localPrefs.getString("selected_account_id", "").orEmpty()
+        if (accountId.isBlank()) {
             setStatus("اختر حسابًا متصلًا أولًا")
             return
         }
-        runCatching {
-            dailyCount.text.toString().toInt().coerceIn(1, 10)
-            horizonDays.text.toString().toInt().coerceIn(1, 30)
-        }.onFailure {
-            setStatus("تحقق من عدد المنشورات وعدد الأيام")
+        val perDay = dailyCount.text.toString().toIntOrNull()
+        val days = horizonDays.text.toString().toIntOrNull()
+        if (perDay == null || perDay !in 1..10 || days == null || days !in 1..30) {
+            setStatus("عدد المنشورات 1..10 وعدد الأيام 1..30")
             return
         }
+        runCatching {
+            com.ym.lite.core.PlanEngine.parseClock(windowStart.text.toString())
+            com.ym.lite.core.PlanEngine.parseClock(windowEnd.text.toString())
+        }.onFailure {
+            setStatus("صيغة الوقت يجب أن تكون HH:mm")
+            return
+        }
+
+        val runId = UUID.randomUUID().toString()
+        createRunSnapshot(runId)
         backgroundPrefs.edit()
             .putBoolean("running", true)
+            .putString("active_run_id", runId)
             .putString("last_status", "AUTO قيد التجهيز في الخلفية")
             .apply()
-        YmPlanWorker.enqueue(this)
+        YmPlanWorker.enqueue(this, runId)
         renderAutoState()
-        setStatus("بدأ AUTO في الخلفية. يمكنك إغلاق واجهة YM؛ سيستمر WorkManager في تجهيز الخطة.")
+        renderPlanSummary()
+        setStatus("بدأ AUTO بخطة ثابتة. يمكنك إغلاق واجهة YM؛ سيستمر WorkManager في تجهيزها.")
+    }
+
+    private fun createRunSnapshot(runId: String) {
+        val uriArray = JSONArray()
+        selected.forEach { uriArray.put(it.toString()) }
+        runPrefs.edit()
+            .putString("$runId.account_id", localPrefs.getString("selected_account_id", "").orEmpty())
+            .putString("$runId.account_label", localPrefs.getString("selected_account_label", "").orEmpty())
+            .putString("$runId.uris", uriArray.toString())
+            .putString("$runId.caption", caption.text.toString())
+            .putString("$runId.daily_count", dailyCount.text.toString())
+            .putString("$runId.window_start", windowStart.text.toString())
+            .putString("$runId.window_end", windowEnd.text.toString())
+            .putString("$runId.horizon_days", horizonDays.text.toString())
+            .putLong("$runId.created_at", System.currentTimeMillis())
+            .putString("$runId.status", "created")
+            .putString("active_run_id", runId)
+            .apply()
     }
 
     private fun stopBackgroundPlan() {
         WorkManager.getInstance(this).cancelUniqueWork(YmPlanWorker.UNIQUE_WORK)
+        val runId = backgroundPrefs.getString("active_run_id", "").orEmpty()
+        if (runId.isNotBlank()) runPrefs.edit().putString("$runId.status", "cancelled").apply()
         backgroundPrefs.edit()
             .putBoolean("running", false)
             .putString("last_status", "تم إيقاف AUTO يدويًا")
             .apply()
         renderAutoState()
+        renderPlanSummary()
         setStatus("تم إيقاف AUTO")
     }
 
@@ -460,26 +526,19 @@ class MainActivity : AppCompatActivity() {
                 val total = info.progress.getInt(YmPlanWorker.KEY_TOTAL, 0)
                 if (total > 0) progress.progress = ((current * 100) / total).coerceIn(0, 100)
                 when (info.state) {
-                    WorkInfo.State.ENQUEUED -> {
-                        autoState.text = "AUTO ينتظر الشبكة"
-                    }
-                    WorkInfo.State.RUNNING -> {
-                        autoState.text = "AUTO يعمل في الخلفية • $current/$total"
-                    }
+                    WorkInfo.State.ENQUEUED -> autoState.text = "AUTO ينتظر الشبكة"
+                    WorkInfo.State.RUNNING -> autoState.text = "AUTO يعمل في الخلفية • $current/$total"
                     WorkInfo.State.SUCCEEDED -> {
                         progress.progress = 100
                         autoState.text = "AUTO سلّم الخطة بنجاح"
                     }
-                    WorkInfo.State.FAILED -> {
-                        autoState.text = "AUTO توقف بسبب خطأ"
-                    }
-                    WorkInfo.State.CANCELLED -> {
-                        autoState.text = "AUTO متوقف"
-                    }
+                    WorkInfo.State.FAILED -> autoState.text = "AUTO توقف بسبب خطأ"
+                    WorkInfo.State.CANCELLED -> autoState.text = "AUTO متوقف"
                     else -> Unit
                 }
                 val last = backgroundPrefs.getString("last_status", "").orEmpty()
                 if (last.isNotBlank()) status.text = last
+                renderPlanSummary()
             }
     }
 
@@ -489,6 +548,22 @@ class MainActivity : AppCompatActivity() {
         } else {
             "AUTO متوقف"
         }
+    }
+
+    private fun renderPlanSummary() {
+        if (!::planSummary.isInitialized) return
+        val runId = backgroundPrefs.getString("active_run_id", "").orEmpty()
+        if (runId.isBlank()) {
+            planSummary.text = "لا توجد خطة نشطة"
+            return
+        }
+        val account = runPrefs.getString("$runId.account_label", "").orEmpty().ifBlank { "حساب غير مسمى" }
+        val days = runPrefs.getString("$runId.horizon_days", "?").orEmpty()
+        val perDay = runPrefs.getString("$runId.daily_count", "?").orEmpty()
+        val state = runPrefs.getString("$runId.status", "created").orEmpty()
+        val scheduled = runPrefs.getInt("$runId.scheduled_count", 0)
+        val size = runPrefs.getInt("$runId.plan_size", 0)
+        planSummary.text = "الحساب: $account\nالخطة: $perDay/يوم × $days يوم\nالحالة: $state • المجدول: $scheduled/$size\nRun: ${runId.take(8)}"
     }
 
     private fun rotateComment() {
@@ -525,29 +600,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setStatus(text: String) {
-        status.text = text
+        if (::status.isInitialized) status.text = text
     }
 
-    private fun card(title: String): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(14), dp(14), dp(14))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(18).toFloat()
-                setColor(Color.rgb(18, 18, 18))
-                setStroke(dp(1), Color.rgb(55, 55, 55))
-            }
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(0, 0, 0, dp(12))
-            }
-            addView(TextView(this@MainActivity).apply {
-                text = title
-                setTextColor(Color.WHITE)
-                textSize = 20f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                setPadding(0, 0, 0, dp(10))
-            })
+    private fun card(title: String): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(14), dp(14), dp(14), dp(14))
+        background = GradientDrawable().apply {
+            cornerRadius = dp(18).toFloat()
+            setColor(Color.rgb(18, 18, 18))
+            setStroke(dp(1), Color.rgb(55, 55, 55))
         }
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            setMargins(0, 0, 0, dp(12))
+        }
+        addView(TextView(this@MainActivity).apply {
+            text = title
+            setTextColor(Color.WHITE)
+            textSize = 20f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, 0, 0, dp(10))
+        })
     }
 
     private fun label(value: String): TextView = TextView(this).apply {
@@ -592,7 +665,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun matchWrap() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onPause() {
@@ -605,6 +677,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         if (::videoView.isInitialized && selected.isNotEmpty()) runCatching { videoView.start() }
         renderAutoState()
+        renderPlanSummary()
     }
 
     override fun onDestroy() {
