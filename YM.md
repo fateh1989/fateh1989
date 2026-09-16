@@ -1,88 +1,65 @@
 # YM / يم — Canonical Project Handoff
 
-This is the durable cross-session handoff for YM. Read this file before changing the project, then read the latest `/Projects/YM/STATE.md` from ChatGPT Library.
+Read this file first when continuing YM, then read the latest `/Projects/YM/STATE.md` from ChatGPT Library.
 
 ## Product identity
-
 - Name: **YM / يم**.
 - Separate from RUN.
-- Goal: a **small Android app** that helps maintain up to **3 TikTok accounts** with wheels, time windows, daily quantity, history and no-repeat behavior.
-- It is not an account farm and must not grow into a large automation platform.
-- The user explicitly prefers a compact Android product over owning a VPS/backend stack.
+- Small Android product for up to **3 TikTok accounts**.
+- YM is now locked as a **video-first app**, not an automation dashboard.
 
-## Locked UX philosophy
+## Locked UX philosophy — v0.7
+The home screen should feel like a modern short-form video app:
+- full-screen vertical video;
+- swipe up/down between wheel videos;
+- top feed tabs;
+- right action rail with profile, like, comments, save and share;
+- bottom navigation;
+- a center `+` button;
+- tapping `+` opens **no more than six circular bubbles** above it.
 
-Visible model:
+Current six bubbles:
+1. **الدولاب** — choose/manage wheel videos and default caption.
+2. **الجدولة** — daily quantity, time window and horizon.
+3. **الحسابات** — connect/refresh/select TikTok accounts.
+4. **اختبار** — one-post proof gate.
+5. **السجل** — last result/history.
+6. **الإعدادات** — Worker URL and pairing credential.
 
-`3 accounts -> wheel/content pool -> time window -> daily quantity -> cloud schedule -> history`
+Automation settings must stay hidden until the user opens one of these bubbles. Do not return YM to the old RUN-like control-panel layout.
 
-The user should not schedule every post manually. YM builds a future plan from a pool of videos and timing rules.
-
-## Current architecture — v0.6 Lite
-
-Chosen first implementation:
-
+## Architecture
 `Android YM -> tiny Cloudflare Worker relay -> Post for Me Quickstart -> TikTok`
 
-Why:
-1. Post for Me currently handles account OAuth, temporary media staging, scheduling, token refresh and remote job execution.
-2. Their Quickstart route can use provider credentials for the first proof instead of requiring YM to own a TikTok developer app immediately.
-3. The phone can be powered off after YM has handed future scheduled jobs to the provider cloud.
-4. The provider project API key is administrative and must not be embedded in an APK, so a tiny relay is required.
-5. The relay has no database, scheduler or media storage; it only holds secrets and exposes a narrow allow-list of operations.
+The Worker exists only to keep provider credentials server-side. It has no database, scheduler or media storage.
 
-Do not replace this with Hetzner/Oracle/VPS infrastructure unless the lightweight route fails.
+Phone-off behavior uses **plan-ahead scheduling**: YM can create future provider jobs in advance, so accepted jobs no longer depend on the phone.
 
-## Phone-off model
+## Current Android implementation
+Source branch: `fateh1989/fateh1989` -> `ym-ui-v0.7`.
 
-YM uses **plan-ahead scheduling**, not Android wakeups.
+v0.7 preserves the v0.6 scheduling engine and adds:
+- full-screen `VideoView` feed;
+- swipe up/down between locally selected wheel videos;
+- tap video to pause/resume;
+- right-side profile/like/comment/save/share controls;
+- bottom home/discover/`+`/history/profile navigation;
+- six circular feature bubbles above `+`;
+- dark overlay sheets for automation controls;
+- local like/save state;
+- Android share intent for the current video.
 
-Example: 2 posts/day for 30 days -> Android creates 60 future scheduled cloud posts in one planning session. After all jobs are accepted, those jobs no longer depend on the phone.
+The scheduling core still includes:
+- maximum 3 accounts;
+- Storage Access Framework multi-video picker;
+- deterministic 1–30 day planner;
+- daily quantity and normal/overnight windows;
+- no immediate media repeat where possible;
+- direct media upload to provider signed upload URL;
+- cloud scheduled-post creation;
+- one-post proof gate before monthly planning.
 
-## Current source and build
-
-Canonical source bundle in ChatGPT Library:
-
-`/Projects/YM/YM-Lite-v0.6.zip`
-
-First compiled Android artifact:
-
-`/Projects/YM/YM-v0.6-debug.apk`
-
-Build provenance:
-- GitHub Actions run: `35046059180`.
-- Android unit tests: passed.
-- `assembleDebug`: passed.
-- APK size: 5,956,422 bytes.
-- APK SHA-256: `15766fadf9ce02239e75b6e34293d44bc098a344aa0e9703ecc67fd207deff44`.
-- APK archive integrity: passed.
-- Real-device install/launch: not yet verified because the connected Android device was offline during this build session.
-
-Also read:
-- `/Projects/YM/README.md`
-- `/Projects/YM/STATE.md`
-- `/Projects/YM/ARCHITECTURE.md`
-
-The old v0.5 FastAPI/Docker backend remains archived as `/Projects/YM/YM-bootstrap.zip` only as a fallback/reference. Do not deploy it by default.
-
-## Android v0.6 implementation
-
-- Kotlin + XML single-screen app; no Compose, Room or Retrofit.
-- Android Keystore-encrypted pairing token.
-- Worker URL + pairing setup.
-- TikTok account connect flow and connected-account refresh.
-- hard product cap of 3 accounts.
-- Storage Access Framework multi-video picker.
-- deterministic wheel planner with normal/overnight windows, daily quantity, jitter and no immediate repeat with multi-item pools.
-- planning horizon capped at 30 days.
-- direct PUT from Android to provider short-lived signed media upload URLs; large media never traverses the Worker.
-- cloud scheduled-post creation using UTC ISO timestamps.
-- dedicated **one-post proof** scheduled roughly 10 minutes ahead.
-- safe result lookup for the most recent proof.
-- monthly plan stays locked until the provider reports a successful proof result.
-
-## Tiny Worker v0.6 implementation
-
+## Worker relay
 Public:
 - `/health`
 - `/oauth-done`
@@ -94,83 +71,77 @@ Pairing-token authenticated:
 - `POST /api/posts`
 - `GET /api/post-results?post_id=...`
 
-Security design:
-- provider key exists only as `POST_FOR_ME_API_KEY` Worker Secret;
-- Android pairing credential exists only as `YM_CLIENT_TOKEN` Worker Secret;
-- provider access/refresh tokens are stripped before account data reaches Android;
-- post creation does **not** proxy arbitrary provider JSON anymore;
-- Android supplies only account ID, caption, media URL and schedule time;
-- Worker constructs the locked TikTok configuration: `public`, `is_draft=false`, comments enabled;
+Security rules:
+- `POST_FOR_ME_API_KEY` exists only as Worker Secret;
+- `YM_CLIENT_TOKEN` exists only as Worker Secret;
+- provider access/refresh tokens are stripped before Android receives account data;
+- Android does not proxy arbitrary provider payloads;
 - only HTTPS media URLs are accepted;
-- schedule is restricted to approximately the next 31 days;
-- publication-result response is whitelisted to success, public URL/platform ID and a short error summary.
+- Worker constructs the locked TikTok posting configuration.
 
-## Verification — current v0.6
+## Verification state
+### Existing core
+- Worker syntax check: passed.
+- Worker unit tests: **8/8 passed**.
+- Pure Kotlin planner compile/smoke: passed.
+- Planner smoke covered 60 slots, chronology, overnight windows and no immediate repeat with a multi-item pool.
 
-- Worker JavaScript syntax check passed.
-- Worker unit tests: **8/8 passed** using mocked provider calls.
-- `PlanEngine.kt` compiled with `kotlinc`.
-- Planner smoke: **OK (60 slots)**, deterministic, chronological, overnight-window capable and no immediate repeat with a multi-item pool.
-- Android unit tests passed in GitHub Actions run `35046059180`.
-- Android `assembleDebug` passed and produced the APK stored in `/Projects/YM/YM-v0.6-debug.apk`.
-- APK compressed-data integrity check passed and the package contains an APK Signing Block.
-- Real-device install/launch is still pending because Remote Desktop Commander reported the device offline.
-- No real Post for Me key, Cloudflare deployment, TikTok account or public post has been used yet.
+### v0.6
+- GitHub Actions run `35046059180`: passed.
+- APK build: passed.
+- User screenshot verified real-device installation and launch: Arabic UI rendered with no crash or white screen.
 
-## Provider facts re-checked 2026-09-16
+### v0.7 video UI
+- Android unit tests: passed.
+- `assembleDebug`: passed.
+- GitHub Actions run `35047608412`: **success**.
+- APK: `/Projects/YM/YM-v0.7-debug.apk`.
+- APK size: `5,968,719` bytes.
+- SHA-256: `4c97e33cfc5ad946d86387a7b364202e7b3cff382cf679931b2b303d9f481175`.
+- APK archive integrity: passed.
+- APK Signing Block present.
+- v0.7 real-device visual/gesture QA: **pending**.
+- Worker connectivity, TikTok OAuth, media upload and real public TikTok publishing: **pending**.
 
-Current Post for Me SDK/docs expose:
-- `POST /v1/social-accounts/auth-url` for account connection;
-- `GET /v1/social-accounts` for connected accounts;
-- `POST /v1/media/create-upload-url` returning `upload_url` + `media_url`;
-- `POST /v1/social-posts` with `scheduled_at`;
-- `GET /v1/social-post-results` with success/failure and platform URL;
-- TikTok config fields for privacy, draft/direct behavior, comments/duet/stitch and related flags;
-- project API keys are administrative credentials and belong server-side.
-
-Re-check these live before changing integration because provider behavior can change.
+## Durable files
+- `/Projects/YM/STATE.md` — latest project state.
+- `/Projects/YM/YM-v0.7-debug.apk` — current APK.
+- `/Projects/YM/YM-Lite-v0.6.zip` — previous full source bundle; current UI source is on GitHub branch `ym-ui-v0.7` until a newer Library bundle is stored.
+- `/Projects/YM/ARCHITECTURE.md` — provider architecture decision.
+- `/Projects/YM/YM-bootstrap.zip` — older v0.5 FastAPI fallback only; do not deploy by default.
 
 ## Mandatory one-account proof gate
+Before normal 30-day/3-account use:
+1. install and visually QA v0.7;
+2. deploy/connect Worker;
+3. connect one TikTok account;
+4. select one video;
+5. schedule one public/non-draft cloud post;
+6. optionally power the phone off before its scheduled time;
+7. require provider success and platform URL;
+8. verify the actual TikTok post is public.
 
-Before a month-long plan or accounts 2/3 are used:
-1. install and launch the built APK on the Android device;
-2. connect one TikTok account;
-3. select one video;
-4. schedule one public/non-draft cloud post;
-5. power the phone off before the scheduled time if desired;
-6. return later and query the provider result;
-7. require provider success and a platform URL;
-8. verify the resulting TikTok post is actually public.
-
-Only then use the 30-day wheel.
+Only then use accounts 2/3 and the month wheel.
 
 ## Provider fallback order
-
-1. **Post for Me Quickstart** — first proof because it keeps YM small.
-2. **TikTok API for Business / Organic Accounts API** if Quickstart cannot deliver the required public unattended workflow.
-3. Hybrid draft/confirmation if platform rules force user confirmation.
+1. Post for Me Quickstart.
+2. TikTok API for Business / Organic Accounts API if needed.
+3. Hybrid draft/confirmation if platform rules force confirmation.
 4. Browser/device automation only as a last technical fallback; do not design anti-detection/evasion mechanisms.
 
-Outbound automated comments on other creators' videos remain unimplemented; no suitable supported general API path was established. Do not let this block the publishing MVP.
-
-## Continuation order
-
+## Continuation rule
 When the user says `اكمل YM` or `اكمل يم`:
-1. Read this file.
-2. Read `/Projects/YM/STATE.md`.
-3. Inspect `/Projects/YM/YM-Lite-v0.6.zip` and the compiled `/Projects/YM/YM-v0.6-debug.apk` or any newer artifacts.
-4. Do not rebuild from scratch.
-5. Keep YM small and resist unnecessary infrastructure.
-6. Test every meaningful change and distinguish source-written, core-tested, APK-built, device-tested, provider-tested and real TikTok-verified states.
-7. Update this handoff and `STATE.md` after every durable milestone.
+1. read this file;
+2. read `/Projects/YM/STATE.md`;
+3. inspect branch `ym-ui-v0.7` and `/Projects/YM/YM-v0.7-debug.apk` or any newer version;
+4. do **not** rebuild from scratch;
+5. preserve the video-first UX and the six-bubble `+` interaction;
+6. keep YM small;
+7. distinguish source-written, core-tested, APK-built, device-tested, provider-tested and real TikTok-verified states.
 
 ## Next milestones
-
-1. Install and launch the compiled APK on the Android device and perform UI/network smoke QA.
-2. Create/connect a Post for Me Quickstart project.
-3. Deploy the tiny Cloudflare Worker and set `POST_FOR_ME_API_KEY` + `YM_CLIENT_TOKEN` as encrypted secrets.
-4. Configure the Quickstart redirect URL to Worker `/oauth-done`.
-5. Connect account 1.
-6. Run the one-post proof with the phone off.
-7. Verify provider result and actual public TikTok URL.
-8. Only after that proof, use the 30-day wheel and accounts 2/3.
+1. Install v0.7 and visually QA the video feed, right rail, bottom bar and six bubbles on the real device.
+2. Tune spacing/size/gestures from the resulting screenshot if needed.
+3. Connect Post for Me Quickstart and deploy the tiny Worker.
+4. Run the one-account/one-post proof.
+5. Only after proof, enable normal 30-day/3-account use.
