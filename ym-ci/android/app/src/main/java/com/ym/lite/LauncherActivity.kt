@@ -1,15 +1,14 @@
 package com.ym.lite
 
+import android.content.ComponentName
 import android.content.Intent
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.ym.lite.overlay.YmOverlayService
+import com.ym.lite.automation.YmAccessibilityService
 
 class LauncherActivity : AppCompatActivity() {
     private var launchAfterGrant = false
@@ -19,20 +18,16 @@ class LauncherActivity : AppCompatActivity() {
         setContentView(R.layout.activity_launcher)
 
         findViewById<Button>(R.id.enableYm).setOnClickListener {
-            if (Settings.canDrawOverlays(this)) {
-                startOverlayAndTikTok()
+            if (isYmAccessibilityEnabled()) {
+                launchTikTok()
+                finish()
             } else {
                 launchAfterGrant = true
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName"),
-                )
-                startActivity(intent)
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }
         }
 
         findViewById<Button>(R.id.openTikTok).setOnClickListener {
-            if (Settings.canDrawOverlays(this)) startOverlay()
             launchTikTok()
         }
 
@@ -50,37 +45,35 @@ class LauncherActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         renderState()
-        if (launchAfterGrant && Settings.canDrawOverlays(this)) {
+        if (launchAfterGrant && isYmAccessibilityEnabled()) {
             launchAfterGrant = false
-            startOverlayAndTikTok()
+            launchTikTok()
+            finish()
         }
     }
 
     private fun renderState() {
-        val overlay = Settings.canDrawOverlays(this)
-        findViewById<TextView>(R.id.launcherState).text = if (overlay) {
-            "YM جاهز بدون إذن إمكانية الوصول • TikTok الرسمي + فقاعات YM"
+        val enabled = isYmAccessibilityEnabled()
+        findViewById<TextView>(R.id.launcherState).text = if (enabled) {
+            "YM جاهز • أدوات YM تظهر داخل TikTok الرسمي فقط"
         } else {
-            "فعّل الظهور فوق التطبيقات مرة واحدة. هذا لا يحتاج خيار الثلاث نقاط."
+            "فعّل خدمة YM AUTO مرة واحدة. بعد التفعيل تعمل أدوات YM داخل TikTok فقط."
         }
 
-        findViewById<Button>(R.id.enableYm).text = if (overlay) {
-            "تشغيل YM وفتح TikTok"
+        findViewById<Button>(R.id.enableYm).text = if (enabled) {
+            "فتح TikTok مع YM"
         } else {
-            "تفعيل فقاعات YM فوق TikTok"
+            "تفعيل YM AUTO"
         }
     }
 
-    private fun startOverlayAndTikTok() {
-        startOverlay()
-        launchTikTok()
-        finish()
-    }
-
-    private fun startOverlay() {
-        if (!Settings.canDrawOverlays(this)) return
-        val intent = Intent(this, YmOverlayService::class.java).setAction(YmOverlayService.ACTION_SHOW)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+    private fun isYmAccessibilityEnabled(): Boolean {
+        val component = ComponentName(this, YmAccessibilityService::class.java).flattenToString()
+        val enabled = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+        ).orEmpty()
+        return enabled.split(':').any { it.equals(component, ignoreCase = true) }
     }
 
     private fun launchTikTok() {
