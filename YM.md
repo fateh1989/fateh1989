@@ -103,38 +103,60 @@ The provider boundary is deliberate: if the supported execution route changes, p
 
 ## Provider route research checkpoint — 2026-09-16
 
-Do **not** choose or build the live provider yet. Research first, then decide.
-
 Routes identified:
 
 1. **TikTok for Developers — Content Posting Direct Post**: works with cloud/web apps and can post directly, but public visibility requires audit/approval and TikTok requires creator-facing privacy/settings UI and explicit consent. Strong fit for normal creator-facing schedulers; uncertain fit for YM's fully unattended private three-account manager.
 2. **TikTok for Developers — Upload/Draft**: uploads media as a draft, then the user must finish the post in TikTok. Safe and official but fails the phone-off/unattended requirement.
-3. **TikTok API for Business — Organic/Accounts API**: has an official endpoint to publish a public video to an owned TikTok account, plus publish status, account analytics, hashtag/location helpers, and management of comments on videos owned by the account. Since March 20, 2026 developers requesting TikTok Accounts scopes must complete an Accounts API Access Application. This route requires a TikTok For Business developer setup and may imply Business Account / Business Center requirements. For EU/UK/US Business Center account-management integration, current TikTok help states a Verified Business Account is required. This is currently the most structurally promising official route for YM, but eligibility/approval must be proven before implementation.
-4. **TikTok Business Center / Web Business Suite native scheduler**: official and low-risk. Current TikTok materials expose account management, analytics and a scheduler; TikTok's scheduler documentation states 15 minutes to 10 days in advance. Good fallback or manual control surface, but by itself does not satisfy a month-long autonomous YM loop.
-5. **TikTok Marketing Partner / third-party scheduler** (Later/Hootsuite/Metricool/Sprout-class tools): proven auto-publishing exists through approved partners. Fastest product route but adds subscription/vendor dependence and does not give YM ownership of the execution layer.
-6. **Unified posting API provider** (for example Post for Me): can absorb OAuth, platform changes and scheduling; some providers support both TikTok API and TikTok Business API. Useful as a temporary or fallback provider behind YM's provider interface, but it is paid/vendor-dependent and must still be checked for whether TikTok posts are truly direct/public versus drafts for the intended account type.
-7. **Browser automation against TikTok Studio/Web Business Suite** (Playwright): open-source projects show this is technically workable and can reuse login state, upload and schedule. It keeps the user's physical phone off, but it is unofficial/brittle: page selectors and login state break, CAPTCHA/re-auth may interrupt it, and browser automation may conflict with TikTok terms/platform controls. Do not use anti-detection/evasion techniques; treat this only as a fallback if a supported route cannot satisfy the product.
-8. **Android app automation on a cloud Android VM/emulator or spare always-on phone**: functionally closest to RUN's execution style and can keep the user's main phone off. However it is operationally heavy, brittle under UI changes/login challenges, and not a preferred route for account safety. A physical spare device is more realistic than an emulator if ever explored, but it violates the goal of an execution engine that is naturally cloud/server based.
-9. **Share Kit / Android intents**: official mobile sharing, but requires a mobile app/user flow and therefore does not satisfy YM's fully unattended phone-off goal.
-10. **Hybrid YM planner + human confirmation**: YM performs wheels/timing/content selection/history/analytics, but sends drafts or prepares scheduled posts for a person to approve. This preserves most of YM's intelligence with the lowest platform risk, but gives up full autonomy.
+3. **TikTok API for Business — Organic/Accounts API**: has an official endpoint to publish a public video to an owned TikTok account, plus publish status, account analytics, hashtag/location helpers, and management of comments on videos owned by the account. Since March 20, 2026 developers requesting TikTok Accounts scopes must complete an Accounts API Access Application. This route requires a TikTok For Business developer setup and may imply Business Account / Business Center requirements.
+4. **TikTok Business Center / Web Business Suite native scheduler**: official and low-risk but insufficient by itself for month-long autonomous scheduling.
+5. **TikTok Marketing Partner / third-party scheduler**: proven auto-publishing exists through approved partners. Fastest product route but adds subscription/vendor dependence.
+6. **Unified posting API provider**: can absorb OAuth, platform changes, media processing and scheduling, and is attractive for a small Android v1.
+7. **Browser automation**: technically workable but unofficial/brittle; not preferred.
+8. **Android cloud VM/emulator or spare device**: workable but operationally heavy; not preferred.
+9. **Share Kit / intents**: requires user interaction and does not satisfy the phone-off goal.
+10. **Hybrid planner + human confirmation**: low platform risk but gives up full autonomy.
 
 Important account-type tradeoff: TikTok Business Accounts currently see only the Commercial Music Library when adding sound, whereas Personal Accounts can see the broader sound library. Do not convert the three target accounts to Business Account until the user confirms that losing general music access is acceptable for their content strategy.
 
-Engagement boundary: the Accounts API can create/reply/like/hide/delete comments associated with organic videos owned by the authorized account. It does **not** establish a general supported path for leaving arbitrary comments/emoji on other creators' videos. Keep the original outbound engagement wheel unimplemented until a supported route is found. TikTok publicly prohibits spam/fake engagement and bulk account manipulation.
+Engagement boundary: the Accounts API can create/reply/like/hide/delete comments associated with organic videos owned by the authorized account. It does **not** establish a general supported path for leaving arbitrary comments/emoji on other creators' videos. Keep the original outbound engagement wheel unimplemented until a supported route is found.
 
-Current research preference (not a final decision): first prove whether the **TikTok API for Business Accounts/Organic API** can be approved for the intended three owned accounts without unacceptable Business Account tradeoffs. If not, compare a vetted partner/unified provider against a hybrid draft/confirmation model before considering browser/device automation.
+## Small Android v1 decision — 2026-09-16
+
+The user explicitly wants YM to remain a **small Android application**, not a large infrastructure/platform project.
+
+Chosen v1 direction:
+
+`small Android app -> Post for Me -> TikTok`
+
+Why this is the preferred first implementation:
+- Post for Me currently exposes TikTok scheduled posting, media processing, multi-account support, account connection/OAuth, feeds and analytics through one API;
+- it supports TikTok and TikTok Business integration routes;
+- current public pricing starts at $10/month for up to 1,000 successful posts with unlimited social accounts;
+- it can use its own social developer credentials or customer-provided credentials;
+- it removes the need for v1 to own a VPS, Docker deployment, ffmpeg service, OAuth token vault and constant TikTok API maintenance;
+- the phone can be fully off after the schedule is handed to the remote provider.
+
+The Android v1 should stay visually and technically small:
+- maximum three account cards;
+- one wheel/content pool per account (expandable later);
+- choose/upload videos;
+- daily quantity;
+- time window;
+- compact next-post/history/status view;
+- connect/disconnect account;
+- no giant dashboard, no browser engine, no cloud Android emulator, no local accessibility automation.
+
+Do **not** purchase/deploy Hetzner/Oracle infrastructure for v1. Preserve the existing YM v0.5 backend as a fallback/provider-independent engine and a source of tested scheduler logic, but do not make it mandatory for the first Android release.
+
+Before building the full Android UI, validate Post for Me with one TikTok account: connect it, schedule one post, verify final public visibility, and verify the scheduled post completes while the phone is off. Their own TikTok integration documentation still notes TikTok production review/audit considerations, so this real test is mandatory before locking the provider permanently.
+
+If that one-account proof fails, provider #2 is TikTok API for Business / Organic Accounts API while keeping exactly the same small Android UI.
 
 ## Not implemented / not live yet
 
-- deployment to a permanent always-on HTTPS host;
-- persistence verification on a real host across restart/redeploy;
-- TikTok URL/domain verification against the deployed media origin;
-- first real TikTok developer app/account authorization;
-- first controlled real post and end-to-end final-status verification;
-- creator-specific duration enforcement before each live Direct Post;
-- three-account dashboard/control client;
-- real engagement/comment execution;
-- Android control app.
+- real one-account Post for Me proof;
+- Android control app;
+- real engagement/comment execution.
 
 ## Continuation order
 
@@ -142,31 +164,21 @@ When continuing YM:
 
 1. Read this file first.
 2. Read `/Projects/YM/STATE.md` from ChatGPT Library for the latest implementation delta.
-3. Inspect the latest `YM-bootstrap.zip` code before changing it.
+3. Inspect the latest `YM-bootstrap.zip` only when backend/fallback work is needed.
 4. Do not rebuild from scratch.
 5. Keep changes small and verifiable.
 6. Test after each meaningful change.
-7. Distinguish clearly between code written, locally tested, deployed, and real TikTok-verified behavior.
+7. Distinguish clearly between code written, locally tested, provider-tested, and real TikTok-verified behavior.
 8. Update this handoff and `/Projects/YM/STATE.md` after every durable milestone because development may span multiple days/conversations.
 
 ## Next milestones
 
-1. Finish provider-route research and choose the live execution model before any provider deployment.
-2. Choose an always-on HTTPS host with persistent storage and secret management only after provider requirements are known.
-3. Deploy v0.5 in `mock` mode first and verify database/media persistence across restart/redeploy.
-4. Point `YM_PUBLIC_BASE_URL` at the final HTTPS origin if the chosen provider needs pullable media URLs.
-5. Connect account 1 only after the chosen route is approved/supported.
-6. Perform one controlled real post and verify final status end to end.
-7. Extend to accounts 2 and 3 only after account 1 is stable.
-8. Build the three-account dashboard/control client.
-9. Add engagement-wheel execution only after confirming a supported path.
-
-## Hosting research note — 2026-09-16
-
-- Render free web services spin down after 15 minutes idle and have ephemeral local files, so they do not satisfy YM's current SQLite + local-media always-on requirement without architectural changes or paid persistent storage.
-- Railway currently has a free plan with limited monthly credit and small volume storage, but real always-on monthly usage must be measured rather than assumed free.
-- Oracle Cloud documentation still lists Always Free compute resources and is a candidate for a zero-cost VM experiment, subject to account/region capacity and current signup requirements.
-- Cloudflare Containers require the Workers Paid plan, so they are not a zero-cost fit for this stage.
+1. Validate Post for Me with one TikTok account before building more infrastructure.
+2. If it schedules and publishes publicly while the phone is off, lock it as the v1 execution provider.
+3. Build the small Android app around `3 accounts -> wheels -> time -> quantity -> history`.
+4. Keep existing YM backend code as fallback, not mandatory infrastructure.
+5. If Post for Me cannot satisfy the public unattended workflow, switch only the provider to TikTok Business/Organic API.
+6. Add the engagement wheel only after a supported route is confirmed.
 
 ## UX direction
 
@@ -174,11 +186,11 @@ Keep the visible model simple:
 
 `3 accounts -> wheels -> time -> quantity -> history`
 
-The user should not need to manage hundreds of individual scheduled tasks. A wheel can contain a large content pool; the user defines a quantity, time window, spacing and no-repeat rules, and the backend executes the plan.
+The user should not need to manage hundreds of individual scheduled tasks. A wheel can contain a large content pool; the user defines a quantity, time window, spacing and no-repeat rules, and the remote provider executes the plan.
 
 ## Relationship to RUN
 
 RUN and YM share scheduling/wheel ideas but remain separate projects.
 
 - RUN: human communication continuity on Android/WhatsApp.
-- YM: persistent social publishing/account continuity on an always-on backend.
+- YM: small Android control app for persistent social publishing/account continuity.
