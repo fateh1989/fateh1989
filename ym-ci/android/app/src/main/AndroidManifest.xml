@@ -14,13 +14,17 @@
         android:theme="@style/Theme.YM">
 
         <activity
-            android:name="com.ym.lite.MainActivity"
+            android:name="com.ym.lite.LauncherActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name="com.ym.lite.MainActivity"
+            android:exported="false" />
 
         <service
             android:name="com.ym.lite.automation.YmAccessibilityService"
