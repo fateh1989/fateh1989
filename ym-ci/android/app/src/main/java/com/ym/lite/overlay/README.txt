@@ -1,0 +1,1 @@
+YM v0.11 overlay fallback: core TikTok launch and YM bubbles use SYSTEM_ALERT_WINDOW and do not require Accessibility. Accessibility remains optional for advanced UI automation such as automatic comments.
