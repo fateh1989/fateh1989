@@ -3,106 +3,64 @@
 ## Current continuation point
 - Product: **YM / يم**, separate from RUN.
 - Repository: `fateh1989/fateh1989`.
-- Current source branch: `ym-v0.19-safe-tiktok-auto`.
-- Current built head: `22a83dcd684497b6eb1cb9beee88b00b6a9c07bf`.
+- Current source branch: `ym-v0.20-real-tiktok-shell`.
+- Current built head: `33fb34f2224e26fe5d88bf6f8e17119b5cf6288b`.
 - Android package: `com.ym.lite.stable`.
-- Version: **0.19.0**, versionCode **19**.
-- GitHub Actions run: **35149961240** / run number **48** — success.
-- Artifact: `YM-v0.19-safe-tiktok-auto-apk`.
-- APK SHA-256: `7cf3123b3dba33fd580415124b63316ff604e1a5f5d687feeff846ccc85e5765`.
-- APK size: `9,688,303` bytes.
+- Version: **0.20.0**, versionCode **20**.
+- GitHub Actions run: **35151075813** / run number **49** — success.
+- Artifact: `YM-v0.20-real-tiktok-shell-apk`.
+- APK SHA-256: `3629bb50795171aefc20462e342c6d3f61b7a3ff5e3bff6d5af30690053751f9`.
+- APK size: `9,690,623` bytes.
 
-## Locked product direction
-YM must feel like a modern TikTok-style video app first, not a settings dashboard. Preserve:
-- full-screen vertical video feed;
-- swipe up/down;
-- current-TikTok-inspired top tabs/right rail/bottom navigation;
-- AUTO as a primary control;
-- library/wheel, publishing scheduler, accounts, history and settings as secondary controls;
-- up to 3 TikTok accounts on the cloud publishing side.
+## Product direction
+The user wants **real TikTok**, not a local imitation. v0.20 therefore makes YM a launcher/control shell around the installed official TikTok app:
+- tapping YM opens the installed official TikTok package;
+- TikTok account/feed/video data remain TikTok's own;
+- YM does not copy or re-render TikTok content;
+- the old local YM feed remains available only as a secondary library/test screen;
+- YM's visible control inside TikTok is a small accessibility overlay bubble.
 
-Do not rebuild YM from scratch.
+## v0.20 launcher shell
+`YmEntryActivity` is now the launcher activity.
+- If YM Accessibility is enabled, opening YM immediately launches real TikTok.
+- If it is not enabled, YM shows a minimal setup screen with: open real TikTok, enable YM Automation, configure TikTok AUTO, and open local YM library.
 
-## v0.18 baseline retained
-v0.19 continues the v0.18 player/feed work:
-- Media3 ExoPlayer full-screen playback;
-- manual vertical navigation;
-- playback pause/resume;
-- like/save local state;
-- comment panel;
-- share action;
-- persisted local video library/wheel;
-- publishing/cloud pieces remain separate from feed automation.
+## TikTok overlay
+`YmTikTokAccessibilityService` keeps the strict v0.19 scope guard and now acts as the main YM control surface inside TikTok:
+- short tap on YM bubble: toggle AUTO on/off;
+- long press: open TikTok AUTO settings;
+- bubble is removed outside TikTok;
+- all swipe/comment/click/back actions re-check the active TikTok window at action time.
 
-## v0.19 safe TikTok AUTO
-v0.19 restores a real TikTok Accessibility AUTO layer but strictly scopes every external action to the active TikTok window.
-
-### Strict scope
-Central allow-list in `TikTokScope`:
+Allowed packages only:
 - `com.zhiliaoapp.musically`
 - `com.ss.android.ugc.trill`
 
-The unit test explicitly rejects:
-- `com.openai.chatgpt`
-- `com.android.settings`
-- `com.google.android.youtube`
-- null package names.
-
-### Runtime guard
-`YmTikTokAccessibilityService`:
-- obtains `rootInActiveWindow` at the point of action;
-- swipes only when the current root belongs to an allowed TikTok package;
-- re-checks TikTok before comment-button click, editor text insertion, send click and Back;
-- removes its AUTO accessibility overlay outside TikTok using a 250 ms scope watcher;
-- if TikTok is not active, external AUTO waits and does not dispatch a global gesture;
-- returning to TikTok can resume while master AUTO remains enabled.
-
-### Android registration restored
-v0.19 registers the service in `AndroidManifest.xml` with `BIND_ACCESSIBILITY_SERVICE` and `@xml/ym_accessibility_service`. The service configuration itself also limits accessibility events to the two allowed TikTok packages.
-
-### TikTok AUTO control screen
-`TikTokAutoActivity` now provides:
-- AUTO on/off;
-- swipe interval 3–120 seconds;
-- optional automatic comments;
-- comment frequency;
-- local comment pool;
-- direct Accessibility settings button;
-- real TikTok launcher;
-- pending-start flow: after the user enables YM Accessibility and returns, TikTok is opened and AUTO is armed.
-
-The existing YM AUTO hub links to this TikTok AUTO screen while keeping cloud publishing AUTO separate.
+Unit tests explicitly reject ChatGPT, Android Settings, YouTube and null package names.
 
 ## Build verification
-GitHub Actions run `35149961240`:
-- relay JavaScript syntax: passed;
-- Android unit tests: passed;
-- strict TikTok scope test: passed;
-- `assembleDebug`: passed;
-- APK upload: passed.
+GitHub Actions run `35151075813` passed:
+- relay JavaScript syntax;
+- Android unit tests;
+- strict TikTok scope test;
+- debug APK build;
+- artifact upload.
 
-CI proves build/test behavior only. It does **not** prove the installed TikTok UI selectors or Accessibility behavior on the user's device.
-
-## Real-device verification still required
-1. Install YM v0.19.
-2. Open `AUTO -> TikTok AUTO`.
-3. Open Accessibility settings and enable **YM Automation**.
-4. Start TikTok AUTO with automatic comments OFF.
-5. Verify automatic vertical swipes in real TikTok.
-6. Leave TikTok while AUTO remains enabled and open ChatGPT or Android Settings.
-7. Verify **zero YM swipes/actions and no YM AUTO overlay outside TikTok**.
-8. Return to TikTok and verify AUTO resumes only there.
-9. Then enable one automatic comment and verify TikTok's current comment/editor/send selectors.
-10. Keep cloud TikTok account linking/publishing verification separate from Accessibility AUTO.
-
-## Known verification boundary
-Do not claim real TikTok AUTO success, comment success, provider OAuth success or public publishing success until each is actually tested on the device/provider.
+## Device verification boundary
+CI does **not** prove device runtime. Still required on the user's phone:
+1. install/update v0.20;
+2. enable YM Automation in Accessibility;
+3. tap YM app icon and confirm it opens the installed real TikTok app;
+4. confirm YM bubble appears only over TikTok;
+5. tap bubble and verify automatic TikTok swipes;
+6. open ChatGPT/Settings while AUTO remains enabled and confirm zero YM actions outside TikTok;
+7. only after swipe proof, test automatic comments against the installed TikTok version/language.
 
 ## Continuation rule
 When the user says `اكمل YM` or `اكمل يم`:
-1. start from branch `ym-v0.19-safe-tiktok-auto` or a newer YM branch;
-2. do not return to v0.10/v0.18 unless diagnosing a regression;
-3. preserve the video-first UI;
-4. preserve strict current-window TikTok scope for every Accessibility action;
-5. never allow global gestures/actions based on stale remembered package state;
-6. distinguish CI-built from device-tested and provider-verified status.
+1. continue from `ym-v0.20-real-tiktok-shell` or newer;
+2. do not rebuild from scratch;
+3. real TikTok remains the primary visible experience;
+4. local YM feed is secondary only;
+5. preserve strict current-window TikTok scope for all Accessibility actions;
+6. distinguish CI-built from real-device-tested status.
