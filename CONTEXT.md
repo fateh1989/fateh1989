@@ -5,6 +5,7 @@ This file is the cross-session handoff for future ChatGPT conversations and codi
 ## Current map
 
 - **RUN** lives in `fateh1989/1122`, branch `main`. The project name is RUN; the repository name is `1122`.
+- **YM / يم** is a separate active TikTok growth/publishing project. Its durable handoff is `YM.md`; current bootstrap/state is also stored in ChatGPT Library under `/Projects/YM/`. When the user says `اكمل مشروع YM` or `اكمل يم`, read `YM.md` first, then the latest `/Projects/YM/STATE.md`, and continue from the current implementation rather than restarting.
 - **Termux Bridge** lives on the Android device under `~/AI-Bridge`; main file: `~/AI-Bridge/bridge.py`. It is infrastructure for execution/control, not the primary Android app repository.
 - **Heavy-equipment reverse parts lookup** is an active research topic. The target workflow is Part Number -> compatible machines/models -> serial ranges -> assembly -> exploded diagram/location -> superseded/alternative numbers. Saved sources are in `RESEARCH.md`.
 - **Binaa** is historical unless explicitly requested.
@@ -31,6 +32,20 @@ When continuing RUN:
 6. Make small changes, run tests/lint/build, inspect logs on failure, and only then report success.
 7. Distinguish CI success from device QA success.
 
+## YM recovery rule
+
+YM may take days to build. Treat its state as durable project state, not chat state. After every meaningful YM change, update the handoff so a fresh conversation can recover the project without asking the user to repeat prior work.
+
+Recovery order for YM:
+
+1. Read `CONTEXT.md`.
+2. Read `PROJECTS.md`.
+3. Read `YM.md`.
+4. Read the latest `/Projects/YM/STATE.md` from ChatGPT Library.
+5. Inspect the latest YM bootstrap/code before editing.
+6. Continue from the last verified milestone; do not rebuild from scratch.
+7. Update `YM.md` or `STATE.md` whenever architecture, implementation status, next milestone, or verification status changes.
+
 ## Infrastructure model
 
 The user uses a layered model:
@@ -50,6 +65,7 @@ Programming knowledge is also durable context. Reusable lessons from Android, Ko
 ## Files to read next
 
 - `PROJECTS.md` — project/repository/status registry.
+- `YM.md` — durable YM philosophy, current implementation, and continuation order.
 - `BRIDGE.md` — Termux Bridge architecture, paths, known issues, and restart/verification rules.
 - `WORKING_RULES.md` — coding, testing, communication, cost, and workflow preferences.
 - `PROGRAMMING_KNOWLEDGE.md` — reusable engineering knowledge and proven implementation patterns accumulated across projects.
