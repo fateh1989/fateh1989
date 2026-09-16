@@ -4,9 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - ym-v0.15-super-feed
+      - ym-v0.16-tiktok-connect
     paths:
       - 'ym-ci/android/**'
+      - 'ym-ci/relay/**'
       - '.github/workflows/ym-build.yml'
 
 jobs:
@@ -26,6 +27,9 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Validate YM relay JavaScript
+        run: node --check ym-ci/relay/src/index.js
+
       - name: Unit tests
         run: gradle -p ym-ci/android testDebugUnitTest --stacktrace
 
@@ -35,6 +39,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: YM-v0.15-super-feed-apk
+          name: YM-v0.16-tiktok-connect-apk
           path: ym-ci/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
