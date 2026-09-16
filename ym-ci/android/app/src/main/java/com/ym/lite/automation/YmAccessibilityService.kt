@@ -10,6 +10,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -18,6 +19,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.ym.lite.MainActivity
+import com.ym.lite.core.AutomationGate
 import kotlin.math.roundToInt
 
 class YmAccessibilityService : AccessibilityService() {
@@ -28,15 +30,15 @@ class YmAccessibilityService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
     private val prefs by lazy { getSharedPreferences("ym_auto", MODE_PRIVATE) }
-    private var activePackage = ""
+
     private var overlayRoot: LinearLayout? = null
     private var overlayMenu: LinearLayout? = null
     private var mainBubble: TextView? = null
     private var autoBubble: TextView? = null
     private var commentBubble: TextView? = null
+
     private var scrollCount = 0
     private var commentIndex = 0
-
     private var enabled = false
     private var scrollEnabled = true
     private var autoComment = false
@@ -44,24 +46,37 @@ class YmAccessibilityService : AccessibilityService() {
     private var commentEvery = 3
     private var comments: List<String> = emptyList()
 
-    private val loop = object : Runnable {
-        override fun run() { tick() }
+    private var generation = 0L
+    private var enteredTikTokThisRun = false
+    private var armedAtMs = 0L
+
+    private val visibilityLoop = object : Runnable {
+        override fun run() {
+            updateOverlayVisibility()
+            handler.postDelayed(this, 400)
+        }
+    }
+
+    private val automationLoop = object : Runnable {
+        override fun run() { tickAutomation() }
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
         reloadFromPrefs()
+        handler.removeCallbacks(visibilityLoop)
+        handler.post(visibilityLoop)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        activePackage = event?.packageName?.toString().orEmpty()
         updateOverlayVisibility()
     }
 
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
+        generation++
         handler.removeCallbacksAndMessages(null)
         removeOverlay()
         if (instance === this) instance = null
@@ -69,113 +84,195 @@ class YmAccessibilityService : AccessibilityService() {
     }
 
     fun reloadFromPrefs() {
-        enabled = prefs.getBoolean("auto_enabled", false)
+        val nextEnabled = prefs.getBoolean("auto_enabled", false)
+        if (nextEnabled && !enabled) {
+            generation++
+            enteredTikTokThisRun = false
+            armedAtMs = SystemClock.elapsedRealtime()
+        } else if (!nextEnabled && enabled) {
+            generation++
+            enteredTikTokThisRun = false
+        }
+
+        enabled = nextEnabled
         scrollEnabled = prefs.getBoolean("auto_scroll", true)
         autoComment = prefs.getBoolean("auto_comment", false)
         intervalMs = prefs.getInt("interval_sec", 8).coerceIn(3, 120) * 1000L
         commentEvery = prefs.getInt("comment_every", 3).coerceIn(1, 100)
         comments = prefs.getString("comment_pool", "").orEmpty()
-            .lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
-        handler.removeCallbacks(loop)
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toList()
+
+        handler.removeCallbacks(automationLoop)
         updateOverlayText()
-        if (enabled) handler.postDelayed(loop, 800)
+        if (enabled) handler.postDelayed(automationLoop, 250)
     }
 
-    private fun tick() {
-        reloadRuntimeOnly()
-        if (!enabled) return
-        if (!isTikTokActive()) {
-            handler.postDelayed(loop, 1_500)
+    private fun tickAutomation() {
+        if (!prefs.getBoolean("auto_enabled", false)) {
+            enabled = false
+            generation++
+            updateOverlayText()
             return
         }
 
+        if (!enabled) reloadFromPrefs()
+        if (!enabled) return
+
+        if (!isTikTokForeground()) {
+            if (enteredTikTokThisRun || SystemClock.elapsedRealtime() - armedAtMs > 7_000L) {
+                stopAutomationBecauseTikTokLeft()
+            } else {
+                handler.postDelayed(automationLoop, 200)
+            }
+            return
+        }
+
+        enteredTikTokThisRun = true
+        val token = generation
         val shouldComment = autoComment && comments.isNotEmpty() && ((scrollCount + 1) % commentEvery == 0)
         if (shouldComment) {
-            attemptComment { handler.postDelayed({ swipeAndContinue() }, 700) }
-        } else {
-            swipeAndContinue()
-        }
-    }
-
-    private fun reloadRuntimeOnly() {
-        enabled = prefs.getBoolean("auto_enabled", false)
-        scrollEnabled = prefs.getBoolean("auto_scroll", true)
-        autoComment = prefs.getBoolean("auto_comment", false)
-    }
-
-    private fun swipeAndContinue() {
-        if (!enabled) return
-        if (scrollEnabled) {
-            val dm = resources.displayMetrics
-            val x = dm.widthPixels / 2f
-            val startY = dm.heightPixels * 0.78f
-            val endY = dm.heightPixels * 0.22f
-            val path = Path().apply {
-                moveTo(x, startY)
-                lineTo(x, endY)
+            attemptComment(token) {
+                if (isActionAllowed(token)) {
+                    handler.postDelayed({ swipeAndContinue(token) }, 700)
+                }
             }
-            val gesture = GestureDescription.Builder()
-                .addStroke(GestureDescription.StrokeDescription(path, 0, 360))
-                .build()
-            dispatchGesture(gesture, null, null)
-            scrollCount++
-            updateOverlayText()
+        } else {
+            swipeAndContinue(token)
         }
-        handler.postDelayed(loop, intervalMs)
     }
 
-    private fun attemptComment(done: () -> Unit) {
+    private fun stopAutomationBecauseTikTokLeft() {
+        generation++
+        enabled = false
+        enteredTikTokThisRun = false
+        prefs.edit().putBoolean("auto_enabled", false).apply()
+        handler.removeCallbacks(automationLoop)
+        updateOverlayText()
+        removeOverlay()
+    }
+
+    private fun currentForegroundPackage(): String? =
+        rootInActiveWindow?.packageName?.toString()
+
+    private fun isTikTokForeground(): Boolean =
+        AutomationGate.isTikTokPackage(currentForegroundPackage())
+
+    private fun isActionAllowed(token: Long): Boolean =
+        token == generation && enabled &&
+            AutomationGate.mayAutomate(true, currentForegroundPackage())
+
+    private fun swipeAndContinue(token: Long) {
+        if (!isActionAllowed(token)) {
+            stopAutomationBecauseTikTokLeft()
+            return
+        }
+
+        if (!scrollEnabled) {
+            scheduleNext(token)
+            return
+        }
+
+        val dm = resources.displayMetrics
+        val path = Path().apply {
+            moveTo(dm.widthPixels / 2f, dm.heightPixels * 0.78f)
+            lineTo(dm.widthPixels / 2f, dm.heightPixels * 0.22f)
+        }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, 360))
+            .build()
+
+        val accepted = dispatchGesture(
+            gesture,
+            object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    if (!isActionAllowed(token)) {
+                        stopAutomationBecauseTikTokLeft()
+                        return
+                    }
+                    scrollCount++
+                    updateOverlayText()
+                    scheduleNext(token)
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    if (isActionAllowed(token)) scheduleNext(token, 700L)
+                }
+            },
+            null,
+        )
+
+        if (!accepted && isActionAllowed(token)) scheduleNext(token, 700L)
+    }
+
+    private fun scheduleNext(token: Long, delayMs: Long = intervalMs) {
+        if (!isActionAllowed(token)) return
+        handler.removeCallbacks(automationLoop)
+        handler.postDelayed(automationLoop, delayMs)
+    }
+
+    private fun attemptComment(token: Long, done: () -> Unit) {
+        if (!isActionAllowed(token)) return
         val root = rootInActiveWindow ?: run { done(); return }
         val commentButton = findNode(root) { node ->
             val label = nodeLabel(node)
             label.contains("comment") || label.contains("تعليق") || label.contains("kommentar")
         }
-        if (!clickNode(commentButton)) {
+        if (!clickNodeSafely(commentButton, token)) {
             done()
             return
         }
 
         handler.postDelayed({
-            val newRoot = rootInActiveWindow
-            val editor = newRoot?.let {
-                findNode(it) { node ->
+            if (!isActionAllowed(token)) return@postDelayed
+            val editor = rootInActiveWindow?.let { newRoot ->
+                findNode(newRoot) { node ->
                     node.isEditable || node.className?.toString()?.contains("EditText") == true
                 }
             }
             if (editor == null) {
-                performGlobalAction(GLOBAL_ACTION_BACK)
+                safeBack(token)
                 done()
                 return@postDelayed
             }
 
-            val text = comments[commentIndex % comments.size]
+            if (!isActionAllowed(token)) return@postDelayed
+            val text = comments.getOrNull(commentIndex % comments.size) ?: run { done(); return@postDelayed }
             val args = Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
             }
             editor.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            if (!isActionAllowed(token)) return@postDelayed
             editor.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
 
             handler.postDelayed({
-                val sendRoot = rootInActiveWindow
-                val send = sendRoot?.let {
-                    findNode(it) { node ->
+                if (!isActionAllowed(token)) return@postDelayed
+                val send = rootInActiveWindow?.let { sendRoot ->
+                    findNode(sendRoot) { node ->
                         val label = nodeLabel(node)
                         label == "send" || label.contains("post") || label.contains("إرسال") ||
                             label.contains("نشر") || label.contains("skicka")
                     }
                 }
-                if (clickNode(send)) {
+                if (clickNodeSafely(send, token)) {
                     commentIndex++
                     handler.postDelayed({
-                        performGlobalAction(GLOBAL_ACTION_BACK)
+                        if (!isActionAllowed(token)) return@postDelayed
+                        safeBack(token)
                         done()
                     }, 450)
                 } else {
-                    performGlobalAction(GLOBAL_ACTION_BACK)
+                    safeBack(token)
                     done()
                 }
             }, 350)
         }, 750)
+    }
+
+    private fun safeBack(token: Long) {
+        if (isActionAllowed(token)) performGlobalAction(GLOBAL_ACTION_BACK)
     }
 
     private fun findNode(
@@ -195,25 +292,18 @@ class YmAccessibilityService : AccessibilityService() {
         listOfNotNull(node.text, node.contentDescription)
             .joinToString(" ").lowercase().trim()
 
-    private fun clickNode(node: AccessibilityNodeInfo?): Boolean {
+    private fun clickNodeSafely(node: AccessibilityNodeInfo?, token: Long): Boolean {
         var current = node ?: return false
         repeat(5) {
+            if (!isActionAllowed(token)) return false
             if (current.isClickable && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
             current = current.parent ?: return false
         }
         return false
     }
 
-    private fun isTikTokPackage(packageName: String?): Boolean =
-        packageName == "com.zhiliaoapp.musically" || packageName == "com.ss.android.ugc.trill"
-
-    private fun isTikTokActive(): Boolean {
-        val rootPackage = rootInActiveWindow?.packageName?.toString()
-        return isTikTokPackage(rootPackage) || isTikTokPackage(activePackage)
-    }
-
     private fun updateOverlayVisibility() {
-        if (isTikTokActive()) ensureOverlay() else removeOverlay()
+        if (isTikTokForeground()) ensureOverlay() else removeOverlay()
     }
 
     private fun bubble(label: String, accent: Int, onClick: () -> Unit): TextView {
@@ -225,7 +315,12 @@ class YmAccessibilityService : AccessibilityService() {
             textSize = 11f
             minWidth = (54 * density).roundToInt()
             minHeight = (44 * density).roundToInt()
-            setPadding((8 * density).roundToInt(), (7 * density).roundToInt(), (8 * density).roundToInt(), (7 * density).roundToInt())
+            setPadding(
+                (8 * density).roundToInt(),
+                (7 * density).roundToInt(),
+                (8 * density).roundToInt(),
+                (7 * density).roundToInt(),
+            )
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 22 * density
@@ -237,6 +332,7 @@ class YmAccessibilityService : AccessibilityService() {
     }
 
     private fun ensureOverlay() {
+        if (!isTikTokForeground()) return
         if (overlayRoot != null) {
             updateOverlayText()
             return
@@ -254,18 +350,23 @@ class YmAccessibilityService : AccessibilityService() {
         }
 
         autoBubble = bubble("AUTO", Color.rgb(37, 244, 238)) {
+            if (!isTikTokForeground()) return@bubble
             val value = !prefs.getBoolean("auto_enabled", false)
             prefs.edit().putBoolean("auto_enabled", value).apply()
             reloadFromPrefs()
         }.also { menu.addView(it) }
 
         commentBubble = bubble("تعليق", Color.rgb(254, 44, 85)) {
+            if (!isTikTokForeground()) return@bubble
             val value = !prefs.getBoolean("auto_comment", false)
             prefs.edit().putBoolean("auto_comment", value).apply()
             reloadFromPrefs()
         }.also { menu.addView(it) }
 
         menu.addView(bubble("ضبط", Color.WHITE) {
+            if (!isTikTokForeground()) return@bubble
+            prefs.edit().putBoolean("auto_enabled", false).apply()
+            reloadFromPrefs()
             removeOverlay()
             startActivity(
                 Intent(this, MainActivity::class.java)
@@ -274,6 +375,7 @@ class YmAccessibilityService : AccessibilityService() {
         })
 
         mainBubble = bubble("YM", Color.rgb(254, 44, 85)) {
+            if (!isTikTokForeground()) return@bubble
             menu.visibility = if (menu.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
 
@@ -291,10 +393,12 @@ class YmAccessibilityService : AccessibilityService() {
             x = (8 * density).roundToInt()
         }
 
-        (getSystemService(WINDOW_SERVICE) as WindowManager).addView(root, lp)
-        overlayRoot = root
-        overlayMenu = menu
-        updateOverlayText()
+        runCatching {
+            (getSystemService(WINDOW_SERVICE) as WindowManager).addView(root, lp)
+            overlayRoot = root
+            overlayMenu = menu
+            updateOverlayText()
+        }
     }
 
     private fun updateOverlayText() {
