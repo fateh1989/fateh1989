@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - ym-v0.19-safe-tiktok-auto
+      - ym-v0.20-real-tiktok-shell
     paths:
       - 'ym-ci/android/**'
       - 'ym-ci/relay/**'
@@ -39,6 +39,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: YM-v0.19-safe-tiktok-auto-apk
+          name: YM-v0.20-real-tiktok-shell-apk
           path: ym-ci/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
