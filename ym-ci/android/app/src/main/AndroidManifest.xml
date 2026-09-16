@@ -24,8 +24,8 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="https"
-                    android:host="${tiktokRedirectHost}"
-                    android:pathPrefix="/tiktok/callback" />
+                    android:host="open-platform.tiktokapis.com"
+                    android:pathPrefix="/callback" />
             </intent-filter>
         </activity>
 
