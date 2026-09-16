@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="28dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="YM"
+        android:textColor="#FFFFFF"
+        android:textSize="36sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/launcherState"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:gravity="center"
+        android:textColor="#DDDDDD"
+        android:textSize="17sp" />
+
+    <Button
+        android:id="@+id/enableYm"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="28dp"
+        android:text="تفعيل YM AUTO" />
+
+    <Button
+        android:id="@+id/openTikTok"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="فتح TikTok الرسمي" />
+
+    <Button
+        android:id="@+id/openYmSettings"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="إعدادات YM" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:gravity="center"
+        android:text="الفيديو والحساب والجلسة كلها من TikTok الرسمي. YM يضيف أدواته فقط فوقه."
+        android:textColor="#999999"
+        android:textSize="14sp" />
+</LinearLayout>
