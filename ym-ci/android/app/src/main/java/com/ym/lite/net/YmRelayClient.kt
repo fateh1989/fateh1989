@@ -9,7 +9,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class YmRelayClient(private val baseUrl: String, private val token: String) {
-    data class Account(val id: String, val label: String)
+    data class Account(val id: String, val label: String, val avatarUrl: String? = null)
     data class UploadTarget(val uploadUrl: String, val mediaUrl: String)
     data class PostResult(val success: Boolean, val url: String?, val error: String?)
 
@@ -32,6 +32,22 @@ class YmRelayClient(private val baseUrl: String, private val token: String) {
         return text
     }
 
+    fun exchangeTikTokAuthCode(authCode: String, codeVerifier: String, grantedScopes: String, redirectUri: String): Account {
+        val payload = JSONObject()
+            .put("code", authCode)
+            .put("code_verifier", codeVerifier)
+            .put("granted_scopes", grantedScopes)
+            .put("redirect_uri", redirectUri)
+        val root = JSONObject(request("/api/tiktok/oauth/exchange", "POST", payload))
+        val account = root.optJSONObject("account") ?: root.optJSONObject("data") ?: root
+        val id = account.optString("id").ifBlank { account.optString("open_id") }
+        require(id.isNotBlank()) { "TikTok account id missing" }
+        val label = account.optString("username").ifBlank {
+            account.optString("display_name").ifBlank { id }
+        }
+        return Account(id, label, account.optString("avatar_url").takeIf { it.isNotBlank() })
+    }
+
     fun createTikTokAuthUrl(): String {
         val text = request("/api/auth-url", "POST", JSONObject().put("platform", "tiktok"))
         return JSONObject(text).getString("url")
@@ -43,10 +59,10 @@ class YmRelayClient(private val baseUrl: String, private val token: String) {
         return buildList {
             for (i in 0 until array.length()) {
                 val o = array.optJSONObject(i) ?: continue
-                val id = o.optString("id")
+                val id = o.optString("id").ifBlank { o.optString("open_id") }
                 if (id.isBlank()) continue
-                val username = o.optString("username")
-                add(Account(id, username.takeIf { it.isNotBlank() } ?: id))
+                val username = o.optString("username").ifBlank { o.optString("display_name") }
+                add(Account(id, username.takeIf { it.isNotBlank() } ?: id, o.optString("avatar_url").takeIf { it.isNotBlank() }))
             }
         }.take(3)
     }
@@ -95,13 +111,7 @@ class YmRelayClient(private val baseUrl: String, private val token: String) {
         return buildList {
             for (i in 0 until rows.length()) {
                 val o = rows.optJSONObject(i) ?: continue
-                add(
-                    PostResult(
-                        success = o.optBoolean("success", false),
-                        url = o.optString("url").takeIf { it.isNotBlank() && it != "null" },
-                        error = o.optString("error").takeIf { it.isNotBlank() && it != "null" },
-                    )
-                )
+                add(PostResult(o.optBoolean("success", false), o.optString("url").takeIf { it.isNotBlank() && it != "null" }, o.optString("error").takeIf { it.isNotBlank() && it != "null" }))
             }
         }
     }
