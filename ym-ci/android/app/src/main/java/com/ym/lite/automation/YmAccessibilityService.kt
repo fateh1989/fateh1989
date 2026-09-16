@@ -143,15 +143,15 @@ class YmAccessibilityService : AccessibilityService() {
             return
         }
 
-        handler.postDelayed({
-            val newRoot = currentTikTokRoot() ?: run { done(); return@postDelayed }
+        handler.postDelayed(outer@{
+            val newRoot = currentTikTokRoot() ?: run { done(); return@outer }
             val editor = findNode(newRoot) { node ->
                 node.isEditable || node.className?.toString()?.contains("EditText") == true
             }
             if (editor == null) {
                 safeBackIfTikTok()
                 done()
-                return@postDelayed
+                return@outer
             }
 
             val text = comments[commentIndex % comments.size]
@@ -160,13 +160,13 @@ class YmAccessibilityService : AccessibilityService() {
             }
             if (currentTikTokRoot() == null) {
                 done()
-                return@postDelayed
+                return@outer
             }
             editor.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
             editor.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
 
-            handler.postDelayed({
-                val sendRoot = currentTikTokRoot() ?: run { done(); return@postDelayed }
+            handler.postDelayed(sendDelay@{
+                val sendRoot = currentTikTokRoot() ?: run { done(); return@sendDelay }
                 val send = findNode(sendRoot) { node ->
                     val label = nodeLabel(node)
                     label == "send" || label.contains("post") || label.contains("إرسال") || label.contains("نشر") || label.contains("skicka")
