@@ -9,6 +9,11 @@
         android:theme="@style/Theme.YM">
 
         <activity
+            android:name="com.ym.lite.FeedActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name="com.ym.lite.MainActivity"
             android:exported="true">
             <intent-filter>
