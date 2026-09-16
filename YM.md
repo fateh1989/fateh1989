@@ -30,7 +30,7 @@ The phone is a **control panel**, not the execution host. YM is intended to keep
 6. Engagement is intended as light presence, not repetitive spam; do not wire live commenting until a suitable supported path is confirmed.
 7. Keep YM focused; do not turn it into a general-purpose phone automation framework.
 
-## Current implementation state — v0.3
+## Current implementation state — v0.4
 
 The working bootstrap is stored in ChatGPT Library at:
 
@@ -41,10 +41,10 @@ Files:
 - `README.md`
 - `STATE.md`
 
-Implemented and locally verified through v0.3:
+Implemented and locally verified through v0.4:
 - hard limit of 3 accounts;
 - persistent accounts and per-account timezones;
-- persistent wheel definitions/items and media references/captions;
+- persistent wheel definitions/items and media metadata/captions;
 - deterministic daily time-slot planning from time window + quantity;
 - daily quantity cap, minimum interval and no-repeat selection;
 - durable SQLite publication jobs with restart survival;
@@ -56,17 +56,22 @@ Implemented and locally verified through v0.3:
 - proactive access-token refresh and refresh-token rotation;
 - token revoke/disconnect path;
 - official Direct Post provider implementation using creator-info + video init + status fetch;
-- `PULL_FROM_URL` HTTPS-only media path;
 - asynchronous publish lifecycle: receiving `publish_id` means submitted, not published;
 - worker polls status and only marks a job published after `PUBLISH_COMPLETE`;
+- local durable media storage for MP4/MOV/WebM;
+- streamed upload with configurable byte limit and SHA-256 metadata;
+- unguessable public media tokens under `/public/media/{token}` for TikTok `PULL_FROM_URL`;
+- configurable `YM_PUBLIC_BASE_URL`, `YM_MEDIA_DIR`, and `YM_MAX_MEDIA_BYTES`;
+- safe replacement/deletion of stored media;
 - mock provider remains the safe default so development never posts accidentally;
 - REST API for accounts/OAuth/media/wheels/jobs.
 
-Verification for v0.3:
+Verification for v0.4:
 - Python compile check passed;
-- **15 tests passed out of 15**;
-- FastAPI smoke startup passed in mock mode (`YM Core 0.3.0`);
-- FastAPI smoke startup also passed with TikTok provider configuration using dummy credentials and no external request.
+- **19 tests passed out of 19**;
+- FastAPI smoke startup passed in mock mode (`YM Core 0.4.0`);
+- media upload/public-fetch smoke test stored bytes and served the same bytes back through the public route;
+- earlier TikTok-configured startup smoke passed with dummy configuration and no external request.
 
 No real TikTok credentials have been used yet and no real TikTok post has been claimed.
 
@@ -80,16 +85,17 @@ Current official endpoints used by the code:
 - post status: `/v2/post/publish/status/fetch/`
 - required Direct Post scope: `video.publish`
 
-Re-check official TikTok documentation live before changing integration details because API requirements and policies can change.
+For `PULL_FROM_URL`, live use requires an HTTPS media URL whose domain or URL prefix is verified for the TikTok developer app. Current official media guidance lists MP4, WebM and MOV and a maximum file size of 4 GB; YM's default byte limit matches that maximum. Re-check official TikTok documentation live before changing integration details because API requirements and policies can change.
 
-The provider defaults to `SELF_ONLY` until another privacy level is deliberately configured. For `PULL_FROM_URL`, live use still requires media to be served from an HTTPS URL under a domain or URL prefix accepted/verified for the TikTok developer app.
+The provider defaults to `SELF_ONLY` until another privacy level is deliberately configured. YM does not yet preflight codec, frame rate, resolution or duration locally.
 
 ## Not implemented / not live yet
 
-- real media-byte storage and verified-domain delivery pipeline;
-- deployment to a permanent always-on host;
+- deployment to a permanent always-on HTTPS host;
+- TikTok URL/domain verification against the deployed media origin;
 - first real TikTok developer app/account authorization;
 - first controlled real Direct Post and end-to-end final-status verification;
+- local media preflight for codec/resolution/frame-rate/duration;
 - three-account dashboard/control client;
 - real engagement/comment execution;
 - Android control app.
@@ -109,13 +115,14 @@ When continuing YM:
 
 ## Next milestones
 
-1. Build actual media storage + HTTPS delivery suitable for TikTok `PULL_FROM_URL`.
-2. Deploy backend to a real always-on host with persistent storage and secret management.
+1. Choose/deploy a real always-on HTTPS host with persistent DB/media storage and secret management.
+2. Point `YM_PUBLIC_BASE_URL` at that origin and verify the domain/URL prefix in TikTok for Developers.
 3. Configure a TikTok developer app and connect the first real account through OAuth.
 4. Perform one controlled real Direct Post and verify final status end to end.
-5. Extend to accounts 2 and 3 only after account 1 is stable.
-6. Build the three-account dashboard/control client.
-7. Add engagement-wheel execution only after confirming a suitable supported path.
+5. Add local media preflight checks.
+6. Extend to accounts 2 and 3 only after account 1 is stable.
+7. Build the three-account dashboard/control client.
+8. Add engagement-wheel execution only after confirming a suitable supported path.
 
 ## UX direction
 
