@@ -156,9 +156,17 @@ class CommentWheelActivity : AppCompatActivity() {
 
     private fun loadValues() {
         val stored = localPrefs.getString("comment_pool", "").orEmpty()
-        val text = if (stored.isBlank()) YmCommentDefaults.all.joinToString("\n") else stored
+        val storedComments = parseComments(stored)
+        val useDefaultLibrary = stored.isBlank() || YmCommentDefaults.isLegacyDefault(storedComments)
+        val comments = if (useDefaultLibrary) YmCommentDefaults.all else storedComments
+        val text = comments.joinToString("\n")
+
+        if (useDefaultLibrary) {
+            localPrefs.edit().putString("comment_pool", text).apply()
+            YmTikTokAccessibilityService.notifyConfigChanged()
+        }
+
         pool.setText(text)
-        val comments = parseComments(text)
         wheel.setComments(comments, localPrefs.getInt("comment_index", 0))
 
         val seconds = autoPrefs.getInt("min_interval_seconds", 3).coerceIn(2, 8)
