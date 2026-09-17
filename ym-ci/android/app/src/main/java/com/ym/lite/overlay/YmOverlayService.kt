@@ -1,0 +1,195 @@
+package com.ym.lite.overlay
+
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
+import android.os.IBinder
+import android.provider.Settings
+import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
+import android.view.WindowManager
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.core.app.NotificationCompat
+import com.ym.lite.TikTokAutoActivity
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+class YmOverlayService : Service() {
+    companion object {
+        const val ACTION_STOP = "com.ym.lite.overlay.STOP"
+        private const val CHANNEL_ID = "ym_overlay"
+        private const val NOTIFICATION_ID = 3201
+    }
+
+    private var windowManager: WindowManager? = null
+    private var overlayView: LinearLayout? = null
+    private val localPrefs by lazy { getSharedPreferences("ym_overlay", MODE_PRIVATE) }
+
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+        startForeground(NOTIFICATION_ID, buildNotification())
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        if (!Settings.canDrawOverlays(this)) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        showOverlay()
+        return START_STICKY
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        removeOverlay()
+        super.onDestroy()
+    }
+
+    private fun showOverlay() {
+        if (overlayView != null) return
+
+        val wm = getSystemService(WINDOW_SERVICE) as WindowManager
+        windowManager = wm
+        val dm = resources.displayMetrics
+        val density = dm.density
+        val buttonSize = (58 * density).roundToInt()
+        val gap = (5 * density).roundToInt()
+        val stackHeight = buttonSize * 3 + gap * 2
+        val maxX = (dm.widthPixels - buttonSize).coerceAtLeast(0)
+        val maxY = (dm.heightPixels - stackHeight).coerceAtLeast(0)
+        val defaultX = (8 * density).roundToInt().coerceIn(0, maxX)
+        val defaultY = (dm.heightPixels * 0.34f).roundToInt().coerceIn(0, maxY)
+
+        val params = WindowManager.LayoutParams(
+            buttonSize,
+            stackHeight,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.START or Gravity.TOP
+            x = localPrefs.getInt("x", defaultX).coerceIn(0, maxX)
+            y = localPrefs.getInt("y", defaultY).coerceIn(0, maxY)
+        }
+
+        fun button(label: String): TextView = TextView(this).apply {
+            text = label
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.argb(235, 18, 18, 18))
+                setStroke((2 * density).roundToInt(), Color.rgb(225, 225, 225))
+            }
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+
+        val stack = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+        }
+
+        val ym = button("YM")
+        val comment = button("💬")
+        val settings = button("⚙")
+
+        listOf(ym, comment, settings).forEachIndexed { index, view ->
+            stack.addView(
+                view,
+                LinearLayout.LayoutParams(buttonSize, buttonSize).apply {
+                    if (index > 0) topMargin = gap
+                },
+            )
+        }
+
+        var downRawX = 0f
+        var downRawY = 0f
+        var downX = 0
+        var downY = 0
+        var dragging = false
+        val threshold = 8 * density
+
+        ym.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    downX = params.x
+                    downY = params.y
+                    dragging = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downRawX
+                    val dy = event.rawY - downRawY
+                    if (abs(dx) > threshold || abs(dy) > threshold) dragging = true
+                    if (dragging) {
+                        params.x = (downX + dx.roundToInt()).coerceIn(0, maxX)
+                        params.y = (downY + dy.roundToInt()).coerceIn(0, maxY)
+                        runCatching { wm.updateViewLayout(stack, params) }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (dragging) {
+                        localPrefs.edit().putInt("x", params.x).putInt("y", params.y).apply()
+                    }
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> true
+                else -> false
+            }
+        }
+
+        runCatching {
+            wm.addView(stack, params)
+            overlayView = stack
+        }.onFailure {
+            overlayView = null
+            stopSelf()
+        }
+    }
+
+    private fun removeOverlay() {
+        val view = overlayView ?: return
+        runCatching { windowManager?.removeView(view) }
+        overlayView = null
+    }
+
+    private fun createNotificationChannel() {
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, "YM floating buttons", NotificationManager.IMPORTANCE_LOW),
+        )
+    }
+
+    private fun buildNotification() = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setContentTitle("YM")
+        .setContentText("الأزرار العائمة تعمل")
+        .setOngoing(true)
+        .setContentIntent(
+            PendingIntent.getActivity(
+                this,
+                0,
+                Intent(this, TikTokAutoActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            ),
+        )
+        .build()
+}
