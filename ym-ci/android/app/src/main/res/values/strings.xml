@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">YM</string>
-    <string name="accessibility_description">YM: ثلاثة أزرار عائمة تظهر فوق TikTok الرئيسي فقط.</string>
+    <string name="accessibility_description">YM Auto Comment: محرك زر 4 لكتابة وإرسال تعليق من دولاب YM داخل TikTok الرئيسي.</string>
 </resources>
