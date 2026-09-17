@@ -67,11 +67,12 @@ class YmOverlayService : Service() {
         val density = dm.density
         val buttonSize = (58 * density).roundToInt()
         val gap = (5 * density).roundToInt()
-        val stackHeight = buttonSize * 3 + gap * 2
+        val buttonCount = 5
+        val stackHeight = buttonSize * buttonCount + gap * (buttonCount - 1)
         val maxX = (dm.widthPixels - buttonSize).coerceAtLeast(0)
         val maxY = (dm.heightPixels - stackHeight).coerceAtLeast(0)
         val defaultX = (8 * density).roundToInt().coerceIn(0, maxX)
-        val defaultY = (dm.heightPixels * 0.34f).roundToInt().coerceIn(0, maxY)
+        val defaultY = (dm.heightPixels * 0.22f).roundToInt().coerceIn(0, maxY)
 
         val params = WindowManager.LayoutParams(
             buttonSize,
@@ -107,8 +108,10 @@ class YmOverlayService : Service() {
         val ym = button("YM")
         val comment = button("💬")
         val settings = button("⚙")
+        val fourth = button("④")
+        val fifth = button("⑤")
 
-        listOf(ym, comment, settings).forEachIndexed { index, view ->
+        listOf(ym, comment, settings, fourth, fifth).forEachIndexed { index, view ->
             stack.addView(
                 view,
                 LinearLayout.LayoutParams(buttonSize, buttonSize).apply {
