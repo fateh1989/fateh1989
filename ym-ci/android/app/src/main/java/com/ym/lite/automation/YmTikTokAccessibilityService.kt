@@ -32,9 +32,11 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private var overlay: TextView? = null
     private var enabled = false
     private var autoComment = false
+    private var smartWatch = true
     private var sessionDurationMs = 60 * 60_000L
     private var sessionEndAt = 0L
-    private var intervalMs = 8_000L
+    private var fixedIntervalMs = 8_000L
+    private var smartFallbackMs = 90_000L
     private var commentEvery = 3
     private var maxCommentsPerSession = 5
     private var commentGapMs = 60_000L
@@ -44,6 +46,11 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private var lastCommentAt = 0L
     private var gestureInFlight = false
     private var comments: List<String> = emptyList()
+
+    private var videoStartedAt = 0L
+    private var lastVideoProgress = -1f
+    private var videoProgressSeen = false
+    private var videoProgressAdvanced = false
 
     private val loop = object : Runnable { override fun run() = tick() }
     private val scopeWatch = object : Runnable {
@@ -80,8 +87,10 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         val wasEnabled = enabled
         enabled = prefs.getBoolean("enabled", false)
         autoComment = prefs.getBoolean("auto_comment", false)
+        smartWatch = prefs.getBoolean("smart_watch", true)
         sessionDurationMs = prefs.getInt("session_duration_min", 60).coerceIn(1, 1440) * 60_000L
-        intervalMs = prefs.getInt("interval_sec", 8).coerceIn(3, 120) * 1000L
+        fixedIntervalMs = prefs.getInt("interval_sec", 8).coerceIn(3, 120) * 1000L
+        smartFallbackMs = prefs.getInt("smart_fallback_sec", 90).coerceIn(15, 600) * 1000L
         commentEvery = prefs.getInt("comment_every", 3).coerceIn(1, 100)
         maxCommentsPerSession = prefs.getInt("max_comments_session", 5).coerceIn(1, 50)
         commentGapMs = prefs.getInt("comment_gap_sec", 60).coerceIn(30, 3600) * 1000L
@@ -96,15 +105,18 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             commentsSent = 0
             lastCommentAt = 0L
             gestureInFlight = false
+            resetVideoTracking()
         } else if (enabled) {
             sessionEndAt = prefs.getLong("session_end_at", 0L)
             if (sessionEndAt <= System.currentTimeMillis()) {
                 sessionEndAt = System.currentTimeMillis() + sessionDurationMs
                 prefs.edit().putLong("session_end_at", sessionEndAt).apply()
             }
+            if (videoStartedAt == 0L) resetVideoTracking()
         } else {
             sessionEndAt = 0L
             gestureInFlight = false
+            clearVideoTracking()
         }
 
         handler.removeCallbacks(loop)
@@ -115,17 +127,58 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private fun tick() {
         enabled = prefs.getBoolean("enabled", false)
         autoComment = prefs.getBoolean("auto_comment", false)
+        smartWatch = prefs.getBoolean("smart_watch", true)
         if (!enabled || !ensureSessionActive()) return
         if (gestureInFlight) {
             handler.postDelayed(loop, 250)
             return
         }
-        if (currentTikTokRoot() == null) {
+
+        val root = currentTikTokRoot()
+        if (root == null) {
             removeOverlay()
             handler.postDelayed(loop, 500)
             return
         }
 
+        if (videoStartedAt == 0L) resetVideoTracking()
+
+        if (!smartWatch) {
+            val elapsed = System.currentTimeMillis() - videoStartedAt
+            if (elapsed >= fixedIntervalMs) advanceCurrentVideo()
+            else handler.postDelayed(loop, (fixedIntervalMs - elapsed).coerceAtMost(500L))
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        val progress = findVideoProgress(root)
+        if (progress != null) {
+            videoProgressSeen = true
+            if (lastVideoProgress >= 0f && progress > lastVideoProgress + 0.003f) {
+                videoProgressAdvanced = true
+            }
+
+            val replayed = videoProgressAdvanced && lastVideoProgress >= 0.90f && progress <= 0.10f
+            val reachedEnd = progress >= 0.985f && (videoProgressAdvanced || progress >= 0.997f)
+            lastVideoProgress = progress
+
+            if (replayed || reachedEnd) {
+                advanceCurrentVideo()
+                return
+            }
+        }
+
+        // Only use the fallback when TikTok exposes no readable playback progress.
+        if (!videoProgressSeen && now - videoStartedAt >= smartFallbackMs) {
+            advanceCurrentVideo()
+            return
+        }
+
+        handler.postDelayed(loop, 400)
+    }
+
+    private fun advanceCurrentVideo() {
+        if (!ensureSessionActive()) return
         val now = System.currentTimeMillis()
         val commentDueByVideo = (scrollCount + 1) % commentEvery == 0
         val commentDueByTime = now - lastCommentAt >= commentGapMs
@@ -147,6 +200,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
 
         enabled = false
         gestureInFlight = false
+        clearVideoTracking()
         prefs.edit()
             .putBoolean("enabled", false)
             .putBoolean("pending_launch", false)
@@ -190,8 +244,9 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                         return
                     }
                     scrollCount++
+                    resetVideoTracking()
                     updateOverlayText()
-                    handler.postDelayed(loop, intervalMs)
+                    handler.postDelayed(loop, 800)
                 }
 
                 override fun onCancelled(gestureDescription: GestureDescription?) {
@@ -256,6 +311,50 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 }
             }, 300)
         }, 650)
+    }
+
+    private fun findVideoProgress(root: AccessibilityNodeInfo): Float? {
+        var best: Float? = null
+
+        fun visit(node: AccessibilityNodeInfo) {
+            val range = node.rangeInfo
+            if (range != null && range.max > range.min) {
+                val className = node.className?.toString()?.lowercase().orEmpty()
+                val label = nodeLabel(node)
+                val looksLikePlayback = className.contains("seekbar") ||
+                    className.contains("progressbar") ||
+                    label.contains("progress") ||
+                    label.contains("playback") ||
+                    label.contains("duration") ||
+                    label.contains("position")
+
+                if (looksLikePlayback) {
+                    val fraction = ((range.current - range.min) / (range.max - range.min)).coerceIn(0f, 1f)
+                    if (best == null || fraction > best!!) best = fraction
+                }
+            }
+
+            for (i in 0 until node.childCount) {
+                node.getChild(i)?.let(::visit)
+            }
+        }
+
+        visit(root)
+        return best
+    }
+
+    private fun resetVideoTracking() {
+        videoStartedAt = System.currentTimeMillis()
+        lastVideoProgress = -1f
+        videoProgressSeen = false
+        videoProgressAdvanced = false
+    }
+
+    private fun clearVideoTracking() {
+        videoStartedAt = 0L
+        lastVideoProgress = -1f
+        videoProgressSeen = false
+        videoProgressAdvanced = false
     }
 
     private fun currentTikTokRoot(): AccessibilityNodeInfo? {
@@ -341,7 +440,8 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         overlay?.text = if (prefs.getBoolean("enabled", false) && sessionEndAt > 0L) {
             val remainingMs = (sessionEndAt - System.currentTimeMillis()).coerceAtLeast(0L)
             val remainingMinutes = (remainingMs + 59_999L) / 60_000L
-            "YM\n● ${remainingMinutes}m\n↕ $scrollCount  💬 $commentsSent"
+            val watchMark = if (prefs.getBoolean("smart_watch", true)) "▶" else "⏱"
+            "YM $watchMark\n● ${remainingMinutes}m\n↕ $scrollCount  💬 $commentsSent"
         } else {
             "YM\n○"
         }
