@@ -50,7 +50,9 @@
 
         <service
             android:name="com.ym.lite.automation.YmTikTokAccessibilityService"
-            android:exported="false"
+            android:enabled="true"
+            android:exported="true"
+            android:label="YM Automation"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
