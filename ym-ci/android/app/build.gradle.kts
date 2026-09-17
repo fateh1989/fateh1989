@@ -18,8 +18,8 @@ android {
         applicationId = "com.ym.lite.stable"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "0.19.0"
+        versionCode = 29
+        versionName = "0.29.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "TIKTOK_CLIENT_KEY", "\"${tiktokClientKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "TIKTOK_REDIRECT_URL", "\"${tiktokRedirectUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
