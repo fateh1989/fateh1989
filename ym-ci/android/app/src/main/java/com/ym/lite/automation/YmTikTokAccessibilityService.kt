@@ -49,7 +49,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private val scopeWatch = object : Runnable {
         override fun run() {
             if (currentTikTokRoot() == null) removeOverlay() else ensureOverlay()
-            if (enabled && !ensureSessionActive()) return
+            if (enabled) ensureSessionActive()
             updateOverlayText()
             handler.postDelayed(this, 1000)
         }
