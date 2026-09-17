@@ -95,6 +95,32 @@ PY
   return 0
 }
 
+
+set_test_adult_birthdate() {
+  adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
+  adb pull /sdcard/window.xml runtime/current-ui.xml >/dev/null 2>&1 || return 1
+  if ! grep -Eiq "birthdate|Year picker" runtime/current-ui.xml; then
+    return 1
+  fi
+
+  echo "setting emulator-only adult birthdate" | tee -a runtime/evidence/navigation.txt
+  # TikTok exposes the year wheel as a scrollable SeekBar at x ~= 802.
+  # Move the wheel one row toward older years per short downward swipe.
+  for _ in $(seq 1 30); do
+    adb shell input swipe 802 1420 802 1540 90
+  done
+  sleep 2
+  capture_stage birthdate-adjusted
+
+  if tap_safe_label "Continue"; then
+    sleep 6
+    capture_stage birthdate-continued
+    return 0
+  fi
+  echo "birthdate Continue was still unavailable" | tee -a runtime/evidence/navigation.txt
+  return 1
+}
+
 is_feed_visible() {
   adb shell dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity' > runtime/current-activity.txt || true
   adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
@@ -121,8 +147,14 @@ sleep 12
 capture_stage pre-nav
 
 # Dismiss only non-account system/onboarding controls. Never choose a login provider or enter credentials.
-for round in 1 2 3 4 5 6; do
+for round in 1 2 3 4 5 6 7 8; do
   is_feed_visible && break
+
+  # TikTok guest mode requires an age gate even without account sign-in.
+  if set_test_adult_birthdate; then
+    continue
+  fi
+
   tapped=false
   for label in "Got it" "Skip" "Not now" "Maybe later" "Continue as guest" "Close" "Later"; do
     if tap_safe_label "$label"; then
