@@ -132,8 +132,9 @@ is_feed_visible() {
   return 1
 }
 
-# Keep auto-comment OFF while TikTok is in first-run/login/onboarding screens.
-write_auto_pref false
+# Runtime guard test: deliberately keep auto-comment ON during TikTok onboarding.
+# The hardened engine must wait for a real feed and must not execute comment fallbacks.
+write_auto_pref true
 adb shell run-as com.ym.lite.stable cat shared_prefs/ym_auto_comment.xml > runtime/evidence/ym-auto-comment-initial.xml
 adb shell appops set com.ym.lite.stable SYSTEM_ALERT_WINDOW allow || true
 adb shell settings put secure enabled_accessibility_services com.ym.lite.stable/com.ym.lite.automation.YmTikTokAccessibilityService
@@ -179,9 +180,33 @@ done
 if ! is_feed_visible; then
   echo "false" > runtime/evidence/feed-reached.txt
   capture_stage feed-not-reached
+  adb shell 'run-as com.ym.lite.stable cat shared_prefs/ym_local.xml' > runtime/evidence/guard-final.xml 2>/dev/null || true
+  python3 - runtime/evidence/guard-final.xml <<'PY'
+import sys, xml.etree.ElementTree as ET
+path = sys.argv[1]
+root = ET.parse(path).getroot()
+values = {}
+for child in root:
+    name = child.attrib.get("name")
+    if not name:
+        continue
+    if child.tag == "string":
+        values[name] = child.text or ""
+    else:
+        values[name] = child.attrib.get("value", "")
+stage = values.get("last_auto_stage", "")
+ok = int(values.get("stat_comment_ok", "0") or 0)
+fail = int(values.get("stat_comment_fail", "0") or 0)
+index = int(values.get("comment_index", "0") or 0)
+print(f"guard stage={stage} ok={ok} fail={fail} index={index}")
+if stage != "waiting_for_feed":
+    raise SystemExit("YM guard did not hold on TikTok onboarding")
+if ok != 0 or fail != 0 or index != 0:
+    raise SystemExit("YM attempted a comment while TikTok was not on the feed")
+PY
   adb logcat -d -v threadtime > runtime/evidence/logcat.txt || true
   adb shell pidof com.zhiliaoapp.musically | tee runtime/evidence/tiktok-pid.txt || true
-  echo "TikTok installed and launched, but an unauthenticated feed was not reachable without account interaction."
+  echo "YM 0.36 guard verified: TikTok onboarding visible, auto-comment stayed idle."
   exit 0
 fi
 
