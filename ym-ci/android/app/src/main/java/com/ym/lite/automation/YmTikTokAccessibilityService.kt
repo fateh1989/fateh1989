@@ -314,9 +314,8 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             handler.postDelayed({
                 val paste = bestNodeAcrossAllWindows(::pasteMenuScore, 10)
                 if (clickNode(paste)) {
-                    textConfirmed = true
-                    record("context_paste_ok", "تم اختيار لصق من قائمة النظام")
-                    handler.postDelayed({ sendComment(0) }, 280L)
+                    record("context_paste_ok", "تم اختيار لصق من قائمة النظام؛ جاري تأكيد النص")
+                    handler.postDelayed({ verifyText(0) }, 320L)
                 } else {
                     fail("paste_menu_missing", "لم يجد YM أمر لصق بعد فتح خانة التعليق")
                 }
