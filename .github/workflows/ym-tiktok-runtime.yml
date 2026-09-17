@@ -4,10 +4,11 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - ym-tiktok-direct-runtime
+      - ym-v0.36-runtime-guard-test
     paths:
       - '.github/workflows/ym-tiktok-runtime.yml'
       - '.github/scripts/ym-tiktok-runtime.sh'
+      - 'ym-ci/android/**'
 
 permissions:
   contents: read
