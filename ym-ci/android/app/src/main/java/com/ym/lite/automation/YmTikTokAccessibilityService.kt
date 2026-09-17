@@ -35,8 +35,8 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private var smartWatch = true
     private var sessionDurationMs = 60 * 60_000L
     private var sessionEndAt = 0L
-    private var fixedIntervalMs = 8_000L
-    private var smartFallbackMs = 90_000L
+    private var fixedIntervalMs = 4_000L
+    private var smartFallbackMs = 4_000L
     private var commentEvery = 3
     private var maxCommentsPerSession = 5
     private var commentGapMs = 60_000L
@@ -89,8 +89,8 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         autoComment = prefs.getBoolean("auto_comment", false)
         smartWatch = prefs.getBoolean("smart_watch", true)
         sessionDurationMs = prefs.getInt("session_duration_min", 60).coerceIn(1, 1440) * 60_000L
-        fixedIntervalMs = prefs.getInt("interval_sec", 8).coerceIn(3, 120) * 1000L
-        smartFallbackMs = prefs.getInt("smart_fallback_sec", 90).coerceIn(15, 600) * 1000L
+        fixedIntervalMs = prefs.getInt("interval_sec", 4).coerceIn(3, 30) * 1000L
+        smartFallbackMs = prefs.getInt("smart_fallback_sec", 4).coerceIn(3, 30) * 1000L
         commentEvery = prefs.getInt("comment_every", 3).coerceIn(1, 100)
         maxCommentsPerSession = prefs.getInt("max_comments_session", 5).coerceIn(1, 50)
         commentGapMs = prefs.getInt("comment_gap_sec", 60).coerceIn(30, 3600) * 1000L
@@ -145,12 +145,11 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         }
 
         if (videoStartedAt == 0L) resetVideoTracking()
-        val now = System.currentTimeMillis()
-        val elapsed = now - videoStartedAt
+        val elapsed = System.currentTimeMillis() - videoStartedAt
 
         if (!smartWatch) {
             if (elapsed >= fixedIntervalMs) advanceCurrentVideo()
-            else handler.postDelayed(loop, (fixedIntervalMs - elapsed).coerceAtMost(500L))
+            else handler.postDelayed(loop, (fixedIntervalMs - elapsed).coerceAtMost(350L))
             return
         }
 
@@ -170,13 +169,13 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             }
         }
 
-        // Hard watchdog: Smart Watch must never freeze the session.
+        // Hard watchdog: even when TikTok exposes progress, never wait past the selected seconds.
         if (elapsed >= smartFallbackMs) {
             advanceCurrentVideo()
             return
         }
 
-        handler.postDelayed(loop, 400)
+        handler.postDelayed(loop, 250)
     }
 
     private fun advanceCurrentVideo() {
@@ -310,12 +309,12 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                     scrollCount++
                     resetVideoTracking()
                     updateOverlayText()
-                    handler.postDelayed(loop, 800)
+                    handler.postDelayed(loop, 500)
                 }
 
                 override fun onCancelled(gestureDescription: GestureDescription?) {
                     gestureInFlight = false
-                    if (ensureSessionActive()) handler.postDelayed(loop, 800)
+                    if (ensureSessionActive()) handler.postDelayed(loop, 500)
                 }
             },
             null,
@@ -323,7 +322,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
 
         if (!accepted) {
             gestureInFlight = false
-            if (ensureSessionActive()) handler.postDelayed(loop, 800)
+            if (ensureSessionActive()) handler.postDelayed(loop, 500)
         }
     }
 
