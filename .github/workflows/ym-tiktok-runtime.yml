@@ -1,0 +1,77 @@
+name: YM TikTok Direct Runtime
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ym-tiktok-direct-runtime
+    paths:
+      - '.github/workflows/ym-tiktok-runtime.yml'
+      - '.github/scripts/ym-tiktok-runtime.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  direct-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build YM debug APK
+        run: gradle -p ym-ci/android assembleDebug --stacktrace
+
+      - name: Download TikTok official package build
+        run: |
+          mkdir -p runtime/tiktok runtime/evidence
+          docker pull ghcr.io/efforg/apkeep:stable
+          docker run --rm \
+            -v "$PWD/runtime/tiktok:/output" \
+            ghcr.io/efforg/apkeep:stable \
+            -a com.zhiliaoapp.musically /output
+          find runtime/tiktok -maxdepth 3 -type f -printf '%p %s bytes\n' | tee runtime/evidence/downloaded-files.txt
+          sha256sum runtime/tiktok/* 2>/dev/null | tee runtime/evidence/download-sha256.txt || true
+
+      - name: Enable KVM access
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+          fi
+
+      - name: Run YM against real TikTok package
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          cores: 2
+          ram-size: 4096M
+          heap-size: 768M
+          disk-size: 8192M
+          emulator-boot-timeout: 900
+          disable-animations: true
+          emulator-options: >-
+            -no-snapshot-load -no-snapshot-save -no-window
+            -gpu swiftshader_indirect -noaudio -no-boot-anim
+            -camera-back none -camera-front none
+          script: bash .github/scripts/ym-tiktok-runtime.sh
+
+      - name: Upload direct runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: YM-TikTok-direct-runtime-evidence
+          path: runtime/evidence/**
+          if-no-files-found: warn
