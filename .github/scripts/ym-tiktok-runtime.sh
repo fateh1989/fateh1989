@@ -156,7 +156,7 @@ for round in 1 2 3 4 5 6 7 8; do
   fi
 
   tapped=false
-  for label in "Got it" "Skip" "Agree and continue" "Not now" "Maybe later" "Continue as guest" "Close" "Later"; do
+  for label in "Got it" "Skip" "Agree and continue" "Don’t allow" "Don't allow" "Not now" "Maybe later" "Continue as guest" "Close" "Later"; do
     if tap_safe_label "$label"; then
       tapped=true
       capture_stage "nav-${round}-${label// /_}"
