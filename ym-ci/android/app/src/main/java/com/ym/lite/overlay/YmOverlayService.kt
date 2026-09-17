@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -16,21 +17,27 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.ym.lite.TikTokAutoActivity
+import com.ym.lite.automation.YmTikTokAccessibilityService
+import com.ym.lite.comment.CommentWheelActivity
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
 class YmOverlayService : Service() {
     companion object {
         const val ACTION_STOP = "com.ym.lite.overlay.STOP"
+        const val ACTION_REFRESH = "com.ym.lite.overlay.REFRESH"
         private const val CHANNEL_ID = "ym_overlay"
         private const val NOTIFICATION_ID = 3201
     }
 
     private var windowManager: WindowManager? = null
     private var overlayView: LinearLayout? = null
+    private var fourthButton: TextView? = null
     private val localPrefs by lazy { getSharedPreferences("ym_overlay", MODE_PRIVATE) }
+    private val autoPrefs by lazy { getSharedPreferences("ym_auto_comment", MODE_PRIVATE) }
 
     override fun onCreate() {
         super.onCreate()
@@ -48,6 +55,7 @@ class YmOverlayService : Service() {
             return START_NOT_STICKY
         }
         showOverlay()
+        if (intent?.action == ACTION_REFRESH) updateFourthAppearance()
         return START_STICKY
     }
 
@@ -59,7 +67,10 @@ class YmOverlayService : Service() {
     }
 
     private fun showOverlay() {
-        if (overlayView != null) return
+        if (overlayView != null) {
+            updateFourthAppearance()
+            return
+        }
 
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         windowManager = wm
@@ -78,8 +89,7 @@ class YmOverlayService : Service() {
             buttonSize,
             stackHeight,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.START or Gravity.TOP
@@ -92,11 +102,7 @@ class YmOverlayService : Service() {
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             textSize = 14f
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.argb(235, 18, 18, 18))
-                setStroke((2 * density).roundToInt(), Color.rgb(225, 225, 225))
-            }
+            background = defaultBubble(density)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
 
@@ -108,8 +114,9 @@ class YmOverlayService : Service() {
         val ym = button("1\nYM")
         val comment = button("2\n💬")
         val settings = button("3\n⚙")
-        val fourth = button("4")
+        val fourth = button("4\n⚡")
         val fifth = button("5")
+        fourthButton = fourth
 
         listOf(ym, comment, settings, fourth, fifth).forEachIndexed { index, view ->
             stack.addView(
@@ -118,6 +125,23 @@ class YmOverlayService : Service() {
                     if (index > 0) topMargin = gap
                 },
             )
+        }
+
+        fourth.setOnClickListener {
+            if (!isAutoCommentEngineEnabled()) {
+                openCommentWheel()
+                Toast.makeText(this, "فعّل محرك YM Auto Comment من شاشة زر 4", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val next = !autoPrefs.getBoolean("enabled", false)
+            autoPrefs.edit().putBoolean("enabled", next).apply()
+            YmTikTokAccessibilityService.notifyConfigChanged()
+            updateFourthAppearance()
+            Toast.makeText(this, if (next) "زر 4 يعمل" else "زر 4 متوقف", Toast.LENGTH_SHORT).show()
+        }
+        fourth.setOnLongClickListener {
+            openCommentWheel()
+            true
         }
 
         var downRawX = 0f
@@ -149,9 +173,7 @@ class YmOverlayService : Service() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (dragging) {
-                        localPrefs.edit().putInt("x", params.x).putInt("y", params.y).apply()
-                    }
+                    if (dragging) localPrefs.edit().putInt("x", params.x).putInt("y", params.y).apply()
                     true
                 }
                 MotionEvent.ACTION_CANCEL -> true
@@ -162,16 +184,53 @@ class YmOverlayService : Service() {
         runCatching {
             wm.addView(stack, params)
             overlayView = stack
+            updateFourthAppearance()
         }.onFailure {
             overlayView = null
+            fourthButton = null
             stopSelf()
         }
+    }
+
+    private fun updateFourthAppearance() {
+        val button = fourthButton ?: return
+        val density = resources.displayMetrics.density
+        val active = autoPrefs.getBoolean("enabled", false)
+        button.text = if (active) "4\n⚡ON" else "4\n⚡"
+        button.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(if (active) Color.rgb(0, 125, 110) else Color.argb(235, 18, 18, 18))
+            setStroke(
+                (2 * density).roundToInt(),
+                if (active) Color.rgb(37, 244, 238) else Color.rgb(225, 225, 225),
+            )
+        }
+    }
+
+    private fun defaultBubble(density: Float) = GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        setColor(Color.argb(235, 18, 18, 18))
+        setStroke((2 * density).roundToInt(), Color.rgb(225, 225, 225))
+    }
+
+    private fun isAutoCommentEngineEnabled(): Boolean {
+        val component = ComponentName(this, YmTikTokAccessibilityService::class.java).flattenToString()
+        val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+        return enabled.split(':').any { it.equals(component, ignoreCase = true) }
+    }
+
+    private fun openCommentWheel() {
+        startActivity(
+            Intent(this, CommentWheelActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
     }
 
     private fun removeOverlay() {
         val view = overlayView ?: return
         runCatching { windowManager?.removeView(view) }
         overlayView = null
+        fourthButton = null
     }
 
     private fun createNotificationChannel() {
