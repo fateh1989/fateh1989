@@ -1,9 +1,11 @@
 package com.ym.lite.automation
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Path
 import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
@@ -34,6 +36,8 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private var lastFinishedAt = 0L
     private var ignoreEventsUntil = 0L
     private var panelOpened = false
+    private var composerGeometryTried = false
+    private var directSendStep = 0
 
     private val feedDebounce = object : Runnable {
         override fun run() {
@@ -109,6 +113,8 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         inFlight = true
         panelOpened = false
         textConfirmed = false
+        composerGeometryTried = false
+        directSendStep = 0
         pendingText = comments[commentIndex % comments.size]
         record("comment_start", "اختار الدولاب: ${pendingText.take(60)} | $reason")
         openComments(0)
@@ -140,13 +146,25 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         }
 
         val entry = bestNodeAcrossTikTok(::composerEntryScore, 10)
-        if (entry != null && attempt <= 7) {
+        if (entry != null && attempt <= 6) {
             val clicked = clickNode(entry)
             record(
                 if (clicked) "composer_clicked" else "composer_retry",
                 if (clicked) "تم ضغط خانة إضافة تعليق" else "وجدت خانة إضافة تعليق ولم تُضغط بعد",
             )
             handler.postDelayed({ activateComposer(attempt + 1) }, 300L)
+            return
+        }
+
+        if (!composerGeometryTried && attempt >= 2) {
+            composerGeometryTried = true
+            val dm = resources.displayMetrics
+            val x = dm.widthPixels * 0.55f
+            val y = dm.heightPixels * 0.94f
+            record("composer_calibrated_tap", "النقر على خانة التعليق السفلية حسب واجهة TikTok الحالية")
+            dispatchTap(x, y) {
+                handler.postDelayed({ activateComposer(attempt + 1) }, 420L)
+            }
             return
         }
 
@@ -167,6 +185,11 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         }
 
         focusEditor(editor)
+        val clear = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
+        }
+        editor.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, clear)
+
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, pendingText)
         }
@@ -255,11 +278,29 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             return
         }
 
-        if (attempt < 8) {
-            record("send_wait", "انتظار زر النشر ${attempt + 1}/9")
-            handler.postDelayed({ findAndSend(attempt + 1) }, 220L)
-        } else {
-            fail("send_missing", "تعذر العثور على زر النشر بدون نقر أعمى")
+        if (attempt >= 2) {
+            directSend(editor, leftSide = true)
+            return
+        }
+
+        record("send_wait", "انتظار زر النشر ${attempt + 1}/3")
+        handler.postDelayed({ findAndSend(attempt + 1) }, 220L)
+    }
+
+    private fun directSend(editor: AccessibilityNodeInfo, leftSide: Boolean) {
+        if (!textConfirmed || !inFlight) return
+        val bounds = Rect()
+        editor.getBoundsInScreen(bounds)
+        val dm = resources.displayMetrics
+        val x = dm.widthPixels * if (leftSide) 0.085f else 0.915f
+        val y = if (!bounds.isEmpty) bounds.centerY().toFloat() else dm.heightPixels * 0.94f
+        directSendStep = if (leftSide) 1 else 2
+        record(
+            if (leftSide) "send_tap_left" else "send_tap_right",
+            if (leftSide) "النقر على سهم الإرسال الوردي يسار خانة التعليق" else "تجربة موضع الإرسال على اليمين",
+        )
+        dispatchTap(x, y) {
+            handler.postDelayed({ verifySubmitted(0) }, 420L)
         }
     }
 
@@ -275,8 +316,15 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             succeed()
             return
         }
-        if (attempt < 6) handler.postDelayed({ verifySubmitted(attempt + 1) }, 240L)
-        else fail("send_unconfirmed", "بقي تعليق الدولاب داخل الحقل بعد الضغط على النشر")
+        if (attempt < 4) {
+            handler.postDelayed({ verifySubmitted(attempt + 1) }, 240L)
+            return
+        }
+        when (directSendStep) {
+            0 -> directSend(editor, leftSide = true)
+            1 -> directSend(editor, leftSide = false)
+            else -> fail("send_unconfirmed", "بقي تعليق الدولاب داخل الحقل بعد محاولات النشر")
+        }
     }
 
     private fun succeed() {
@@ -331,6 +379,8 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         textConfirmed = false
         inFlight = false
         panelOpened = false
+        composerGeometryTried = false
+        directSendStep = 0
     }
 
     private fun tiktokRoots(): List<AccessibilityNodeInfo> {
@@ -490,6 +540,25 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             }
         }
         return best
+    }
+
+    private fun dispatchTap(x: Float, y: Float, after: () -> Unit) {
+        val path = Path().apply { moveTo(x, y) }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0L, 70L))
+            .build()
+        val callback = object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) {
+                super.onCompleted(gestureDescription)
+                after()
+            }
+
+            override fun onCancelled(gestureDescription: GestureDescription?) {
+                super.onCancelled(gestureDescription)
+                after()
+            }
+        }
+        if (!dispatchGesture(gesture, callback, handler)) after()
     }
 
     private fun clickNode(node: AccessibilityNodeInfo?): Boolean {
