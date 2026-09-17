@@ -17,6 +17,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.ym.lite.automation.TikTokScope
+import com.ym.lite.comment.CommentWheelActivity
 import com.ym.lite.overlay.YmOverlayService
 
 class TikTokAutoActivity : AppCompatActivity() {
@@ -43,10 +44,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         }
         scroll.addView(
             body,
-            ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ),
+            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
         )
 
         body.addView(TextView(this).apply {
@@ -58,7 +56,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         })
 
         body.addView(TextView(this).apply {
-            text = "المرحلة 1: خمسة أزرار عائمة فوق TikTok الرئيسي.\nلا نستخدم إمكانية الوصول في هذه النسخة."
+            text = "خمسة أزرار عائمة فوق TikTok الرئيسي. كل رقم له وظيفة مستقلة داخل YM."
             setTextColor(Color.LTGRAY)
             textSize = 17f
             gravity = Gravity.CENTER
@@ -75,11 +73,9 @@ class TikTokAutoActivity : AppCompatActivity() {
         body.addView(status, matchWrap().apply { bottomMargin = dp(18) })
 
         body.addView(actionButton("السماح لـ YM بالظهور فوق التطبيقات") {
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName"),
+            startActivity(
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")),
             )
-            startActivity(intent)
         }, matchWrap())
 
         body.addView(actionButton("تشغيل الأزرار وفتح TikTok الرئيسي") {
@@ -87,35 +83,30 @@ class TikTokAutoActivity : AppCompatActivity() {
                 Toast.makeText(this, "اسمح أولًا لـ YM بالظهور فوق التطبيقات", Toast.LENGTH_LONG).show()
                 return@actionButton
             }
-            ContextCompat.startForegroundService(
-                this,
-                Intent(this, YmOverlayService::class.java),
-            )
+            ContextCompat.startForegroundService(this, Intent(this, YmOverlayService::class.java))
             launchMainTikTok()
         }, matchWrap())
 
         body.addView(actionButton("إيقاف الأزرار العائمة") {
-            startService(
-                Intent(this, YmOverlayService::class.java).setAction(YmOverlayService.ACTION_STOP),
-            )
+            startService(Intent(this, YmOverlayService::class.java).setAction(YmOverlayService.ACTION_STOP))
         }, matchWrap())
 
         body.addView(sectionTitle("وظائف الأزرار الخمسة"))
 
         body.addView(functionButton("1 — YM — الزر الرئيسي") {
-            Toast.makeText(this, "زر 1 — YM: سنربط وظيفته الرئيسية هنا", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "زر 1 — YM", Toast.LENGTH_SHORT).show()
         }, matchWrap())
 
         body.addView(functionButton("2 — 💬 — التعليقات") {
-            Toast.makeText(this, "زر 2 — التعليقات: سنربط وظيفة التعليق هنا", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "زر 2 — التعليقات", Toast.LENGTH_SHORT).show()
         }, matchWrap())
 
         body.addView(functionButton("3 — ⚙ — الإعدادات") {
             Toast.makeText(this, "زر 3 — الإعدادات", Toast.LENGTH_SHORT).show()
         }, matchWrap())
 
-        body.addView(functionButton("4 — غير محدد بعد") {
-            Toast.makeText(this, "حدد لي وظيفة الزر 4", Toast.LENGTH_SHORT).show()
+        body.addView(functionButton("4 — ⚡ — التعليق الأوتوماتيكي") {
+            startActivity(Intent(this, CommentWheelActivity::class.java))
         }, matchWrap())
 
         body.addView(functionButton("5 — غير محدد بعد") {
@@ -123,7 +114,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         }, matchWrap())
 
         body.addView(TextView(this).apply {
-            text = "الأزرار الخمسة في هذه الشاشة تقابل الأزرار العائمة 1 إلى 5. سنربط وظيفة كل زر هنا ثم نجعل الزر العائم ينفذ نفس الوظيفة."
+            text = "زر 4 يفتح دولاب التعليقات الكبير. الزر العائم 4 يشغّل/يوقف التعليق الأوتوماتيكي، والضغط المطوّل عليه يفتح الدولاب."
             setTextColor(Color.LTGRAY)
             textSize = 15f
             gravity = Gravity.CENTER
@@ -139,7 +130,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         status.text = if (overlayAllowed) {
             "✓ إذن الظهور فوق التطبيقات مفعّل\nيمكن تشغيل الأزرار الخمسة"
         } else {
-            "YM يحتاج إذن الظهور فوق التطبيقات فقط\nلا يحتاج Accessibility ولا قائمة الثلاث نقاط"
+            "YM يحتاج إذن الظهور فوق التطبيقات للأزرار العائمة"
         }
         status.setTextColor(if (overlayAllowed) Color.rgb(37, 244, 238) else Color.WHITE)
     }
