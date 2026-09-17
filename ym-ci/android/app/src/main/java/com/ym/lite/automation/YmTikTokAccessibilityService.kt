@@ -45,11 +45,11 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private var commentsSent = 0
     private var lastCommentAt = 0L
     private var gestureInFlight = false
+    private var commentFlowInFlight = false
     private var comments: List<String> = emptyList()
 
     private var videoStartedAt = 0L
     private var lastVideoProgress = -1f
-    private var videoProgressSeen = false
     private var videoProgressAdvanced = false
 
     private val loop = object : Runnable { override fun run() = tick() }
@@ -105,6 +105,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             commentsSent = 0
             lastCommentAt = 0L
             gestureInFlight = false
+            commentFlowInFlight = false
             resetVideoTracking()
         } else if (enabled) {
             sessionEndAt = prefs.getLong("session_end_at", 0L)
@@ -116,6 +117,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         } else {
             sessionEndAt = 0L
             gestureInFlight = false
+            commentFlowInFlight = false
             clearVideoTracking()
         }
 
@@ -129,7 +131,8 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         autoComment = prefs.getBoolean("auto_comment", false)
         smartWatch = prefs.getBoolean("smart_watch", true)
         if (!enabled || !ensureSessionActive()) return
-        if (gestureInFlight) {
+
+        if (gestureInFlight || commentFlowInFlight) {
             handler.postDelayed(loop, 250)
             return
         }
@@ -142,18 +145,17 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         }
 
         if (videoStartedAt == 0L) resetVideoTracking()
+        val now = System.currentTimeMillis()
+        val elapsed = now - videoStartedAt
 
         if (!smartWatch) {
-            val elapsed = System.currentTimeMillis() - videoStartedAt
             if (elapsed >= fixedIntervalMs) advanceCurrentVideo()
             else handler.postDelayed(loop, (fixedIntervalMs - elapsed).coerceAtMost(500L))
             return
         }
 
-        val now = System.currentTimeMillis()
         val progress = findVideoProgress(root)
         if (progress != null) {
-            videoProgressSeen = true
             if (lastVideoProgress >= 0f && progress > lastVideoProgress + 0.003f) {
                 videoProgressAdvanced = true
             }
@@ -168,7 +170,8 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             }
         }
 
-        if (!videoProgressSeen && now - videoStartedAt >= smartFallbackMs) {
+        // Hard watchdog: Smart Watch must never freeze the session.
+        if (elapsed >= smartFallbackMs) {
             advanceCurrentVideo()
             return
         }
@@ -177,7 +180,8 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     }
 
     private fun advanceCurrentVideo() {
-        if (!ensureSessionActive()) return
+        if (!ensureSessionActive() || gestureInFlight || commentFlowInFlight) return
+
         val now = System.currentTimeMillis()
         val commentDueByVideo = (scrollCount + 1) % commentEvery == 0
         val commentDueByTime = now - lastCommentAt >= commentGapMs
@@ -185,8 +189,16 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         val shouldComment = autoComment && comments.isNotEmpty() && commentDueByVideo &&
             commentDueByTime && withinSessionLimit
 
-        if (shouldComment) attemptComment { handler.postDelayed({ swipeAndContinue() }, 500) }
-        else swipeAndContinue()
+        if (!shouldComment) {
+            swipeAndContinue()
+            return
+        }
+
+        commentFlowInFlight = true
+        attemptComment {
+            commentFlowInFlight = false
+            handler.postDelayed({ closeCommentUiAndSwipe(2) }, 250)
+        }
     }
 
     private fun ensureSessionActive(): Boolean {
@@ -220,6 +232,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private fun stopAutopilot(showToast: Boolean) {
         enabled = false
         gestureInFlight = false
+        commentFlowInFlight = false
         sessionEndAt = 0L
         clearVideoTracking()
         prefs.edit()
@@ -233,6 +246,35 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             Toast.makeText(this, "تم إيقاف YM AUTOPILOT", Toast.LENGTH_SHORT).show()
         }
     }
+
+    private fun closeCommentUiAndSwipe(backAttempts: Int) {
+        if (!prefs.getBoolean("enabled", false) || !ensureSessionActive()) return
+
+        val root = currentTikTokRoot()
+        if (root == null) {
+            handler.postDelayed(loop, 500)
+            return
+        }
+
+        if (commentComposerVisible(root) && backAttempts > 0) {
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            handler.postDelayed({ closeCommentUiAndSwipe(backAttempts - 1) }, 300)
+            return
+        }
+
+        swipeAndContinue()
+    }
+
+    private fun commentComposerVisible(root: AccessibilityNodeInfo): Boolean =
+        findNode(root) { node ->
+            if (node.isEditable || node.className?.toString()?.contains("EditText") == true) return@findNode true
+            val label = nodeLabel(node)
+            label.contains("add comment") ||
+                label.contains("write a comment") ||
+                label.contains("إضافة تعليق") ||
+                label.contains("اكتب تعليق") ||
+                label.contains("lägg till kommentar")
+        } != null
 
     private fun swipeAndContinue() {
         if (!prefs.getBoolean("enabled", false) || !ensureSessionActive()) return
@@ -304,8 +346,10 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 node.isEditable || node.className?.toString()?.contains("EditText") == true
             }
             if (editor == null) {
-                safeBackIfTikTok(); done(); return@openEditor
+                done()
+                return@openEditor
             }
+
             val text = comments[commentIndex % comments.size]
             val args = Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
@@ -322,15 +366,14 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                     label == "send" || label.contains("post") || label.contains("إرسال") ||
                         label.contains("نشر") || label.contains("skicka")
                 }
+
                 if (clickNode(send)) {
                     commentIndex++
                     commentsSent++
                     lastCommentAt = System.currentTimeMillis()
                     updateOverlayText()
-                    handler.postDelayed({ safeBackIfTikTok(); done() }, 350)
-                } else {
-                    safeBackIfTikTok(); done()
                 }
+                done()
             }, 300)
         }, 650)
     }
@@ -368,14 +411,12 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private fun resetVideoTracking() {
         videoStartedAt = System.currentTimeMillis()
         lastVideoProgress = -1f
-        videoProgressSeen = false
         videoProgressAdvanced = false
     }
 
     private fun clearVideoTracking() {
         videoStartedAt = 0L
         lastVideoProgress = -1f
-        videoProgressSeen = false
         videoProgressAdvanced = false
     }
 
@@ -408,10 +449,6 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private fun nodeLabel(node: AccessibilityNodeInfo): String =
         listOfNotNull(node.text, node.contentDescription).joinToString(" ").lowercase().trim()
 
-    private fun safeBackIfTikTok() {
-        if (currentTikTokRoot() != null && ensureSessionActive()) performGlobalAction(GLOBAL_ACTION_BACK)
-    }
-
     private fun ensureOverlay() {
         if (overlay != null) { updateOverlayText(); return }
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
@@ -429,9 +466,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 setColor(Color.argb(224, 15, 15, 15))
                 setStroke((2 * density).roundToInt(), Color.rgb(37, 244, 238))
             }
-            setOnClickListener {
-                toggleAutopilotFromOverlay()
-            }
+            setOnClickListener { toggleAutopilotFromOverlay() }
             setOnLongClickListener {
                 if (currentTikTokRoot() == null) return@setOnLongClickListener false
                 startActivity(Intent(this@YmTikTokAccessibilityService, TikTokAutoActivity::class.java).apply {
@@ -459,8 +494,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         overlay?.text = if (prefs.getBoolean("enabled", false) && sessionEndAt > 0L) {
             val remainingMs = (sessionEndAt - System.currentTimeMillis()).coerceAtLeast(0L)
             val remainingMinutes = (remainingMs + 59_999L) / 60_000L
-            val watchMark = if (prefs.getBoolean("smart_watch", true)) "SMART" else "TIMER"
-            "■ STOP\n$watchMark · ${remainingMinutes}m\n↕ $scrollCount  💬 $commentsSent"
+            "■ STOP\n${remainingMinutes}m\n↕ $scrollCount  💬 $commentsSent"
         } else {
             "▶ AUTO\nYM"
         }
