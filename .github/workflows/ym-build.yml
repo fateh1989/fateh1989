@@ -43,6 +43,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: YM-v0.35.9-100-positive-comments-apk
+          name: YM-v0.35.10-feed-guard-100-comments-apk
           path: ym-ci/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
