@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - ym-v0.30-comment-wheel
+      - ym-v0.37-panel-close-guard
     paths:
       - 'ym-ci/android/**'
       - 'ym-ci/relay/**'
@@ -43,6 +44,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: YM-v0.35.9-100-positive-comments-apk
+          name: YM-v0.37-panel-close-guard-apk
           path: ym-ci/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
