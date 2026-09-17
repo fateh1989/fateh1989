@@ -48,7 +48,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
 
     private val attemptRunnable = object : Runnable {
         override fun run() {
-            if (!enabled || inFlight || !hasTikTokWindow()) return
+            if (!enabled || inFlight || !isFeedReadyForComment()) return
             val now = SystemClock.uptimeMillis()
             val wait = (lastFinishedAt + minIntervalMs - now).coerceAtLeast(0L)
             if (wait > 0L) {
@@ -66,7 +66,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
 
     private val watchdog = object : Runnable {
         override fun run() {
-            if (enabled && !inFlight && hasTikTokWindow()) {
+            if (enabled && !inFlight && isFeedReadyForComment()) {
                 val now = SystemClock.uptimeMillis()
                 if ((!lastOutcomeSuccess && now >= retryAfterFailureAt) || videoEpoch > attemptedEpoch) {
                     scheduleAttempt(120L)
@@ -87,6 +87,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null || !TikTokScope.isAllowed(event.packageName) || !enabled) return
+        if (!isFeedReadyForComment()) return
 
         val isFeedAdvance = event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
             event.eventType == AccessibilityEvent.TYPE_VIEW_SELECTED
@@ -151,7 +152,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     }
 
     private fun beginComment(reason: String) {
-        if (!enabled || inFlight || comments.isEmpty() || !hasTikTokWindow()) return
+        if (!enabled || inFlight || comments.isEmpty() || !isFeedReadyForComment()) return
         inFlight = true
         attemptedEpoch = videoEpoch
         panelOpened = false
@@ -495,6 +496,18 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     }
 
     private fun hasTikTokWindow(): Boolean = tiktokRoots().isNotEmpty()
+
+    /**
+     * Button 4 must never start from login, onboarding, Terms, settings, or any other
+     * TikTok-owned screen. A real video/comment surface exposes either the comments
+     * action itself or the composer/editor when the sheet is already open.
+     */
+    private fun isFeedReadyForComment(): Boolean {
+        if (!hasTikTokWindow()) return false
+        if (bestNodeAcrossTikTok(::commentButtonScore, 14) != null) return true
+        if (findEditorAcrossTikTok() != null) return true
+        return bestNodeAcrossTikTok(::composerEntryScore, 12) != null
+    }
 
     private fun findEditorAcrossTikTok(): AccessibilityNodeInfo? {
         tiktokRoots().forEach { root ->
