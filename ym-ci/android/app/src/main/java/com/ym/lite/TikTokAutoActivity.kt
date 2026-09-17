@@ -29,6 +29,8 @@ class TikTokAutoActivity : AppCompatActivity() {
     private lateinit var interval: EditText
     private lateinit var autoComment: Switch
     private lateinit var commentEvery: EditText
+    private lateinit var maxCommentsSession: EditText
+    private lateinit var commentGapSeconds: EditText
     private lateinit var commentPool: EditText
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,6 +93,14 @@ class TikTokAutoActivity : AppCompatActivity() {
         commentEvery = numberField("3")
         body.addView(commentEvery, matchWrap())
 
+        body.addView(label("أقصى عدد تعليقات في جلسة التشغيل — من 1 إلى 50"))
+        maxCommentsSession = numberField("5")
+        body.addView(maxCommentsSession, matchWrap())
+
+        body.addView(label("أقل وقت بين تعليق وآخر — من 30 إلى 3600 ثانية"))
+        commentGapSeconds = numberField("60")
+        body.addView(commentGapSeconds, matchWrap())
+
         body.addView(label("دولاب التعليقات — كل سطر تعليق مستقل"))
         commentPool = EditText(this).apply {
             hint = "مثال:\nجميل جدًا 🔥\nاستمر 👏"
@@ -144,19 +154,29 @@ class TikTokAutoActivity : AppCompatActivity() {
         interval.setText(prefs.getInt("interval_sec", 8).toString())
         autoComment.isChecked = prefs.getBoolean("auto_comment", false)
         commentEvery.setText(prefs.getInt("comment_every", 3).toString())
+        maxCommentsSession.setText(prefs.getInt("max_comments_session", 5).toString())
+        commentGapSeconds.setText(prefs.getInt("comment_gap_sec", 60).toString())
         commentPool.setText(localPrefs.getString("comment_pool", "").orEmpty())
     }
 
     private fun saveSettings(masterEnabled: Boolean) {
         val seconds = interval.text.toString().toIntOrNull()?.coerceIn(3, 120) ?: 8
         val every = commentEvery.text.toString().toIntOrNull()?.coerceIn(1, 100) ?: 3
+        val maxComments = maxCommentsSession.text.toString().toIntOrNull()?.coerceIn(1, 50) ?: 5
+        val gapSeconds = commentGapSeconds.text.toString().toIntOrNull()?.coerceIn(30, 3600) ?: 60
+
         interval.setText(seconds.toString())
         commentEvery.setText(every.toString())
+        maxCommentsSession.setText(maxComments.toString())
+        commentGapSeconds.setText(gapSeconds.toString())
+
         prefs.edit()
             .putBoolean("enabled", masterEnabled)
             .putBoolean("auto_comment", autoComment.isChecked)
             .putInt("interval_sec", seconds)
             .putInt("comment_every", every)
+            .putInt("max_comments_session", maxComments)
+            .putInt("comment_gap_sec", gapSeconds)
             .apply()
         localPrefs.edit().putString("comment_pool", commentPool.text.toString()).apply()
         YmTikTokAccessibilityService.notifyConfigChanged()
@@ -170,12 +190,16 @@ class TikTokAutoActivity : AppCompatActivity() {
         val commentState = prefs.getBoolean("auto_comment", false)
         val count = localPrefs.getString("comment_pool", "").orEmpty()
             .lineSequence().count { it.isNotBlank() }
+        val maxComments = prefs.getInt("max_comments_session", 5)
+        val gap = prefs.getInt("comment_gap_sec", 60)
+
         status.text = buildString {
             append(if (running) "● TikTok AUTO يعمل" else "○ TikTok AUTO متوقف")
             append("\nإمكانية الوصول: ")
             append(if (access) "مفعّلة" else "غير مفعّلة")
             append("\nالتعليقات: ")
             append(if (commentState) "مفعّلة ($count)" else "متوقفة")
+            if (commentState) append(" — حد الجلسة $maxComments — فاصل ${gap}ث")
         }
         status.setTextColor(if (running && access) Color.rgb(37, 244, 238) else Color.WHITE)
     }
