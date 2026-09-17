@@ -33,49 +33,6 @@ class TikTokAutoActivity : AppCompatActivity() {
     private lateinit var commentGapSeconds: EditText
     private lateinit var commentPool: EditText
 
-    private val templatePacks = linkedMapOf(
-        "إعجاب" to listOf(
-            "جميل جدًا 🔥",
-            "فيديو رائع 👏",
-            "محتوى جميل جدًا",
-            "أحسنت 👌",
-            "لقطة جميلة جدًا",
-            "استمر 🔥",
-            "عمل ممتاز 👏",
-            "مبدع كالعادة",
-        ),
-        "دعم" to listOf(
-            "استمر، محتواك جميل 👏",
-            "بالتوفيق دائمًا 🌟",
-            "مستوى جميل، كمل 🔥",
-            "ننتظر المزيد 👌",
-            "أحسنت، استمر بنفس المستوى",
-            "دعم كامل لك 🙌",
-            "محتوى يستحق المتابعة",
-            "واصل، شغل جميل جدًا",
-        ),
-        "سؤال" to listOf(
-            "كيف سويت هذا؟",
-            "وين المكان؟",
-            "ممكن تفاصيل أكثر؟",
-            "من وين الفكرة؟",
-            "هل عندك جزء ثاني؟",
-            "كم أخذ منك وقت؟",
-            "هل تنصح نجربها؟",
-            "ممكن تشرح الطريقة؟",
-        ),
-        "عام" to listOf(
-            "رائع 👌",
-            "جميل جدًا",
-            "حلو 🔥",
-            "ممتاز 👏",
-            "فكرة جميلة",
-            "لقطة موفقة",
-            "محتوى مرتب",
-            "استمر 👍",
-        ),
-    )
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(buildScreen())
@@ -109,8 +66,9 @@ class TikTokAutoActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
         })
+
         body.addView(TextView(this).apply {
-            text = "التحكم يعمل فقط داخل نافذة TikTok النشطة. خارج TikTok لا ينفّذ YM تمريرًا ولا ضغطًا ولا رجوعًا."
+            text = "التحكم يعمل فقط داخل TikTok. دولاب التعليقات مخصص للدعم والتشجيع فقط."
             setTextColor(Color.LTGRAY)
             textSize = 14f
             gravity = Gravity.CENTER
@@ -144,30 +102,26 @@ class TikTokAutoActivity : AppCompatActivity() {
         commentGapSeconds = numberField("60")
         body.addView(commentGapSeconds, matchWrap())
 
-        body.addView(label("قوالب تعليقات جاهزة"))
-        body.addView(templateRow("إعجاب", "دعم"), matchWrap())
-        body.addView(templateRow("سؤال", "عام"), matchWrap())
-        body.addView(actionButton("خلط كل القوالب") {
-            val mixed = templatePacks.values.flatten().distinct()
-            commentPool.setText(mixed.joinToString("\n"))
-            Toast.makeText(this, "تم تحميل ${mixed.size} تعليقًا جاهزًا", Toast.LENGTH_SHORT).show()
-        }, matchWrap())
-        body.addView(actionButton("مسح التعليقات") {
-            commentPool.setText("")
-        }, matchWrap())
-
-        body.addView(label("دولاب التعليقات — كل سطر تعليق مستقل ويمكنك تعديل القوالب"))
+        body.addView(label("دولاب الدعم — 100 تعليق تشجيعي: 70 إنكليزي + 30 عربي"))
         commentPool = EditText(this).apply {
-            hint = "مثال:\nجميل جدًا 🔥\nاستمر 👏"
+            hint = "اختر دولاب الدعم أو عدّل التعليقات يدويًا"
             setHintTextColor(Color.DKGRAY)
             setTextColor(Color.WHITE)
             textSize = 16f
             gravity = Gravity.TOP or Gravity.START
-            minLines = 7
+            minLines = 8
             background = roundedBox()
             setPadding(dp(12), dp(10), dp(12), dp(10))
         }
-        body.addView(commentPool, matchWrap().apply { bottomMargin = dp(14) })
+        body.addView(commentPool, matchWrap().apply { bottomMargin = dp(10) })
+
+        body.addView(templateRow("English 70", "عربي 30"), matchWrap())
+        body.addView(actionButton("دولاب الدعم 100 👏🙌🌟") {
+            loadCommentPack(SupportCommentWheel.all, "دولاب الدعم 100")
+        }, matchWrap())
+        body.addView(actionButton("مسح التعليقات") {
+            commentPool.setText("")
+        }, matchWrap())
 
         body.addView(actionButton("حفظ الإعدادات") {
             saveSettings(prefs.getBoolean("enabled", false))
@@ -222,10 +176,16 @@ class TikTokAutoActivity : AppCompatActivity() {
         text = name
         isAllCaps = false
         setOnClickListener {
-            val pack = templatePacks[name].orEmpty()
-            commentPool.setText(pack.joinToString("\n"))
-            Toast.makeText(this@TikTokAutoActivity, "تم تحميل قالب $name (${pack.size})", Toast.LENGTH_SHORT).show()
+            when (name) {
+                "English 70" -> loadCommentPack(SupportCommentWheel.english, name)
+                "عربي 30" -> loadCommentPack(SupportCommentWheel.arabic, name)
+            }
         }
+    }
+
+    private fun loadCommentPack(pack: List<String>, label: String) {
+        commentPool.setText(pack.joinToString("\n"))
+        Toast.makeText(this, "تم تحميل $label (${pack.size})", Toast.LENGTH_SHORT).show()
     }
 
     private fun loadSettings() {
@@ -256,6 +216,7 @@ class TikTokAutoActivity : AppCompatActivity() {
             .putInt("max_comments_session", maxComments)
             .putInt("comment_gap_sec", gapSeconds)
             .apply()
+
         localPrefs.edit().putString("comment_pool", commentPool.text.toString()).apply()
         YmTikTokAccessibilityService.notifyConfigChanged()
         render()
@@ -296,10 +257,12 @@ class TikTokAutoActivity : AppCompatActivity() {
             .asSequence()
             .mapNotNull { packageManager.getLaunchIntentForPackage(it) }
             .firstOrNull()
+
         if (intent == null) {
             Toast.makeText(this, "لم أجد تطبيق TikTok المدعوم على الجهاز", Toast.LENGTH_LONG).show()
             return
         }
+
         startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
