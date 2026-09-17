@@ -5,8 +5,6 @@
     <queries>
         <package android:name="com.zhiliaoapp.musically" />
         <package android:name="com.ss.android.ugc.trill" />
-        <package android:name="com.tiktok.lite.go" />
-        <package android:name="com.zhiliaoapp.musically.go" />
     </queries>
 
     <application
@@ -30,11 +28,11 @@
 
         <activity android:name="com.ym.lite.LibraryActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name="com.ym.lite.AutoActivity" android:exported="false" android:screenOrientation="portrait" />
-        <activity android:name="com.ym.lite.TikTokAutoActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name="com.ym.lite.ProfileActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name="com.ym.lite.MainActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name="com.ym.lite.FeedActivity" android:exported="false" android:screenOrientation="portrait" />
 
-        <activity android:name="com.ym.lite.FeedActivity" android:exported="true" android:screenOrientation="portrait">
+        <activity android:name="com.ym.lite.TikTokAutoActivity" android:exported="true" android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
