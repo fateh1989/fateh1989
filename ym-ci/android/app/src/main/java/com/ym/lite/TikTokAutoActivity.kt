@@ -58,7 +58,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         })
 
         body.addView(TextView(this).apply {
-            text = "المرحلة 1: ثلاثة أزرار عائمة فقط فوق TikTok الرئيسي.\nلا نستخدم إمكانية الوصول في هذه النسخة."
+            text = "المرحلة 1: خمسة أزرار عائمة فوق TikTok الرئيسي.\nلا نستخدم إمكانية الوصول في هذه النسخة."
             setTextColor(Color.LTGRAY)
             textSize = 17f
             gravity = Gravity.CENTER
@@ -74,7 +74,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         }
         body.addView(status, matchWrap().apply { bottomMargin = dp(18) })
 
-        body.addView(actionButton("1 — السماح لـ YM بالظهور فوق التطبيقات") {
+        body.addView(actionButton("السماح لـ YM بالظهور فوق التطبيقات") {
             val intent = Intent(
                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                 Uri.parse("package:$packageName"),
@@ -82,7 +82,7 @@ class TikTokAutoActivity : AppCompatActivity() {
             startActivity(intent)
         }, matchWrap())
 
-        body.addView(actionButton("2 — تشغيل الأزرار وفتح TikTok الرئيسي") {
+        body.addView(actionButton("تشغيل الأزرار وفتح TikTok الرئيسي") {
             if (!Settings.canDrawOverlays(this)) {
                 Toast.makeText(this, "اسمح أولًا لـ YM بالظهور فوق التطبيقات", Toast.LENGTH_LONG).show()
                 return@actionButton
@@ -100,8 +100,30 @@ class TikTokAutoActivity : AppCompatActivity() {
             )
         }, matchWrap())
 
+        body.addView(sectionTitle("وظائف الأزرار الخمسة"))
+
+        body.addView(functionButton("1 — YM — الزر الرئيسي") {
+            Toast.makeText(this, "زر 1 — YM: سنربط وظيفته الرئيسية هنا", Toast.LENGTH_SHORT).show()
+        }, matchWrap())
+
+        body.addView(functionButton("2 — 💬 — التعليقات") {
+            Toast.makeText(this, "زر 2 — التعليقات: سنربط وظيفة التعليق هنا", Toast.LENGTH_SHORT).show()
+        }, matchWrap())
+
+        body.addView(functionButton("3 — ⚙ — الإعدادات") {
+            Toast.makeText(this, "زر 3 — الإعدادات", Toast.LENGTH_SHORT).show()
+        }, matchWrap())
+
+        body.addView(functionButton("4 — غير محدد بعد") {
+            Toast.makeText(this, "حدد لي وظيفة الزر 4", Toast.LENGTH_SHORT).show()
+        }, matchWrap())
+
+        body.addView(functionButton("5 — غير محدد بعد") {
+            Toast.makeText(this, "حدد لي وظيفة الزر 5", Toast.LENGTH_SHORT).show()
+        }, matchWrap())
+
         body.addView(TextView(this).apply {
-            text = "بعد الخطوة 2 يظهر على اليسار عمود: YM ثم 💬 ثم ⚙. اسحب زر YM لتحريك العمود فوق زر «تمرير تلقائي» الأصلي. الأزرار بلا وظائف في هذه المرحلة."
+            text = "الأزرار الخمسة في هذه الشاشة تقابل الأزرار العائمة 1 إلى 5. سنربط وظيفة كل زر هنا ثم نجعل الزر العائم ينفذ نفس الوظيفة."
             setTextColor(Color.LTGRAY)
             textSize = 15f
             gravity = Gravity.CENTER
@@ -115,7 +137,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         if (!::status.isInitialized) return
         val overlayAllowed = Settings.canDrawOverlays(this)
         status.text = if (overlayAllowed) {
-            "✓ إذن الظهور فوق التطبيقات مفعّل\nاضغط الخطوة 2"
+            "✓ إذن الظهور فوق التطبيقات مفعّل\nيمكن تشغيل الأزرار الخمسة"
         } else {
             "YM يحتاج إذن الظهور فوق التطبيقات فقط\nلا يحتاج Accessibility ولا قائمة الثلاث نقاط"
         }
@@ -134,10 +156,33 @@ class TikTokAutoActivity : AppCompatActivity() {
         startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
+    private fun sectionTitle(text: String) = TextView(this).apply {
+        this.text = text
+        setTextColor(Color.WHITE)
+        textSize = 21f
+        gravity = Gravity.CENTER
+        setTypeface(typeface, Typeface.BOLD)
+        setPadding(0, dp(18), 0, dp(12))
+    }
+
     private fun actionButton(text: String, onClick: () -> Unit) = Button(this).apply {
         this.text = text
         isAllCaps = false
         textSize = 17f
+        setOnClickListener { onClick() }
+    }
+
+    private fun functionButton(text: String, onClick: () -> Unit) = Button(this).apply {
+        this.text = text
+        isAllCaps = false
+        textSize = 17f
+        setTextColor(Color.WHITE)
+        background = GradientDrawable().apply {
+            cornerRadius = dp(12).toFloat()
+            setColor(Color.rgb(35, 35, 35))
+            setStroke(dp(1), Color.rgb(95, 95, 95))
+        }
+        setPadding(dp(12), dp(10), dp(12), dp(10))
         setOnClickListener { onClick() }
     }
 
