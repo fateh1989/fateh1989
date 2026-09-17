@@ -259,7 +259,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             textSize = 19f
             maxLines = 2
             isClickable = true
-            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+            importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
             setOnClickListener {
                 if (!isTikTokForeground()) return@setOnClickListener
                 val next = !prefs.getBoolean("enabled", false)
