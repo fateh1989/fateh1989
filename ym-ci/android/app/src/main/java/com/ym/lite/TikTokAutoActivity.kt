@@ -27,6 +27,8 @@ class TikTokAutoActivity : AppCompatActivity() {
 
     private lateinit var status: TextView
     private lateinit var sessionDuration: EditText
+    private lateinit var smartWatch: Switch
+    private lateinit var smartFallback: EditText
     private lateinit var interval: EditText
     private lateinit var autoComment: Switch
     private lateinit var commentEvery: EditText
@@ -69,7 +71,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         })
 
         body.addView(TextView(this).apply {
-            text = "حدد مدة الجلسة، ثم اترك YM يشاهد ويقلب ويستخدم دولاب الدعم داخل TikTok فقط."
+            text = "YM ينتظر نهاية الفيديو، يقلب تلقائيًا، ويستخدم دولاب الدعم داخل TikTok فقط."
             setTextColor(Color.LTGRAY)
             textSize = 14f
             gravity = Gravity.CENTER
@@ -79,13 +81,25 @@ class TikTokAutoActivity : AppCompatActivity() {
         status = cardText()
         body.addView(status, matchWrap().apply { bottomMargin = dp(14) })
 
-        body.addView(label("مدة جلسة AUTOPILOT بالدقائق — تتوقف الجلسة تلقائيًا عند انتهائها"))
+        body.addView(label("مدة جلسة AUTOPILOT بالدقائق — تتوقف الجلسة تلقائيًا"))
         sessionDuration = numberField("60")
         body.addView(sessionDuration, matchWrap())
         body.addView(durationRow(15, 30), matchWrap())
         body.addView(durationRow(60, 120), matchWrap())
 
-        body.addView(label("زمن الانتقال بين الفيديوهات — من 3 إلى 120 ثانية"))
+        smartWatch = Switch(this).apply {
+            text = "Smart Watch — انتظر نهاية الفيديو قبل الانتقال"
+            setTextColor(Color.WHITE)
+            textSize = 16f
+            setPadding(0, dp(14), 0, dp(8))
+        }
+        body.addView(smartWatch, matchWrap())
+
+        body.addView(label("مهلة احتياطية إذا لم يستطع YM قراءة تقدم الفيديو — من 15 إلى 600 ثانية"))
+        smartFallback = numberField("90")
+        body.addView(smartFallback, matchWrap())
+
+        body.addView(label("زمن ثابت عند إيقاف Smart Watch — من 3 إلى 120 ثانية"))
         interval = numberField("8")
         body.addView(interval, matchWrap())
 
@@ -126,9 +140,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         body.addView(actionButton("دولاب الدعم 100 👏🙌🌟") {
             loadCommentPack(SupportCommentWheel.all, "دولاب الدعم 100")
         }, matchWrap())
-        body.addView(actionButton("مسح التعليقات") {
-            commentPool.setText("")
-        }, matchWrap())
+        body.addView(actionButton("مسح التعليقات") { commentPool.setText("") }, matchWrap())
 
         body.addView(actionButton("حفظ الإعدادات") {
             saveSettings(prefs.getBoolean("enabled", false))
@@ -170,17 +182,11 @@ class TikTokAutoActivity : AppCompatActivity() {
         return scroll
     }
 
-    private fun durationRow(first: Int, second: Int): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            weightSum = 2f
-            addView(durationButton(first), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginEnd = dp(4)
-            })
-            addView(durationButton(second), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = dp(4)
-            })
-        }
+    private fun durationRow(first: Int, second: Int): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        weightSum = 2f
+        addView(durationButton(first), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(4) })
+        addView(durationButton(second), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(4) })
     }
 
     private fun durationButton(minutes: Int) = Button(this).apply {
@@ -189,17 +195,11 @@ class TikTokAutoActivity : AppCompatActivity() {
         setOnClickListener { sessionDuration.setText(minutes.toString()) }
     }
 
-    private fun templateRow(first: String, second: String): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            weightSum = 2f
-            addView(templateButton(first), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginEnd = dp(4)
-            })
-            addView(templateButton(second), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginStart = dp(4)
-            })
-        }
+    private fun templateRow(first: String, second: String): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        weightSum = 2f
+        addView(templateButton(first), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(4) })
+        addView(templateButton(second), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(4) })
     }
 
     private fun templateButton(name: String) = Button(this).apply {
@@ -220,6 +220,8 @@ class TikTokAutoActivity : AppCompatActivity() {
 
     private fun loadSettings() {
         sessionDuration.setText(prefs.getInt("session_duration_min", 60).toString())
+        smartWatch.isChecked = prefs.getBoolean("smart_watch", true)
+        smartFallback.setText(prefs.getInt("smart_fallback_sec", 90).toString())
         interval.setText(prefs.getInt("interval_sec", 8).toString())
         autoComment.isChecked = prefs.getBoolean("auto_comment", false)
         commentEvery.setText(prefs.getInt("comment_every", 3).toString())
@@ -230,12 +232,14 @@ class TikTokAutoActivity : AppCompatActivity() {
 
     private fun saveSettings(masterEnabled: Boolean) {
         val durationMinutes = sessionDuration.text.toString().toIntOrNull()?.coerceIn(1, 1440) ?: 60
+        val fallbackSeconds = smartFallback.text.toString().toIntOrNull()?.coerceIn(15, 600) ?: 90
         val seconds = interval.text.toString().toIntOrNull()?.coerceIn(3, 120) ?: 8
         val every = commentEvery.text.toString().toIntOrNull()?.coerceIn(1, 100) ?: 3
         val maxComments = maxCommentsSession.text.toString().toIntOrNull()?.coerceIn(1, 50) ?: 5
         val gapSeconds = commentGapSeconds.text.toString().toIntOrNull()?.coerceIn(30, 3600) ?: 60
 
         sessionDuration.setText(durationMinutes.toString())
+        smartFallback.setText(fallbackSeconds.toString())
         interval.setText(seconds.toString())
         commentEvery.setText(every.toString())
         maxCommentsSession.setText(maxComments.toString())
@@ -243,8 +247,10 @@ class TikTokAutoActivity : AppCompatActivity() {
 
         prefs.edit()
             .putBoolean("enabled", masterEnabled)
+            .putBoolean("smart_watch", smartWatch.isChecked)
             .putBoolean("auto_comment", autoComment.isChecked)
             .putInt("session_duration_min", durationMinutes)
+            .putInt("smart_fallback_sec", fallbackSeconds)
             .putInt("interval_sec", seconds)
             .putInt("comment_every", every)
             .putInt("max_comments_session", maxComments)
@@ -260,21 +266,23 @@ class TikTokAutoActivity : AppCompatActivity() {
         if (!::status.isInitialized) return
         val access = isAccessibilityEnabled()
         val running = prefs.getBoolean("enabled", false)
+        val smart = prefs.getBoolean("smart_watch", true)
         val commentState = prefs.getBoolean("auto_comment", false)
-        val count = localPrefs.getString("comment_pool", "").orEmpty()
-            .lineSequence().count { it.isNotBlank() }
+        val count = localPrefs.getString("comment_pool", "").orEmpty().lineSequence().count { it.isNotBlank() }
         val maxComments = prefs.getInt("max_comments_session", 5)
         val gap = prefs.getInt("comment_gap_sec", 60)
         val duration = prefs.getInt("session_duration_min", 60)
+        val fallback = prefs.getInt("smart_fallback_sec", 90)
 
         status.text = buildString {
             append(if (running) "● AUTOPILOT يعمل" else "○ AUTOPILOT متوقف")
-            append("\nمدة الجلسة: ")
-            append(formatMinutes(duration))
+            append("\nمدة الجلسة: ${formatMinutes(duration)}")
+            append("\nالمشاهدة: ")
+            append(if (smart) "Smart Watch — نهاية الفيديو (احتياط ${fallback}ث)" else "زمن ثابت")
             append("\nإمكانية الوصول: ")
             append(if (access) "مفعّلة" else "غير مفعّلة")
-            append("\nالتعليقات: ")
-            append(if (commentState) "مفعّلة ($count)" else "متوقفة")
+            append("\nدولاب الدعم: ")
+            append(if (commentState) "مفعّل ($count تعليق)" else "متوقف")
             if (commentState) append(" — حد الجلسة $maxComments — فاصل ${gap}ث")
         }
         status.setTextColor(if (running && access) Color.rgb(37, 244, 238) else Color.WHITE)
@@ -288,24 +296,16 @@ class TikTokAutoActivity : AppCompatActivity() {
 
     private fun isAccessibilityEnabled(): Boolean {
         val component = ComponentName(this, YmTikTokAccessibilityService::class.java).flattenToString()
-        val enabled = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-        ).orEmpty()
+        val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
         return enabled.split(':').any { it.equals(component, ignoreCase = true) }
     }
 
     private fun launchTikTok() {
-        val intent = TikTokScope.allowedPackages
-            .asSequence()
-            .mapNotNull { packageManager.getLaunchIntentForPackage(it) }
-            .firstOrNull()
-
+        val intent = TikTokScope.allowedPackages.asSequence().mapNotNull { packageManager.getLaunchIntentForPackage(it) }.firstOrNull()
         if (intent == null) {
             Toast.makeText(this, "لم أجد تطبيق TikTok المدعوم على الجهاز", Toast.LENGTH_LONG).show()
             return
         }
-
         startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
@@ -347,10 +347,9 @@ class TikTokAutoActivity : AppCompatActivity() {
         setStroke(dp(1), Color.rgb(55, 55, 55))
     }
 
-    private fun matchWrap() = LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        ViewGroup.LayoutParams.WRAP_CONTENT,
-    ).apply { bottomMargin = dp(8) }
+    private fun matchWrap() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        bottomMargin = dp(8)
+    }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
