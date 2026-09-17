@@ -5,6 +5,8 @@
     <queries>
         <package android:name="com.zhiliaoapp.musically" />
         <package android:name="com.ss.android.ugc.trill" />
+        <package android:name="com.tiktok.lite.go" />
+        <package android:name="com.zhiliaoapp.musically.go" />
     </queries>
 
     <application
@@ -22,42 +24,17 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="https"
-                    android:host="open-platform.tiktokapis.com"
-                    android:pathPrefix="/callback" />
+                <data android:scheme="https" android:host="open-platform.tiktokapis.com" android:pathPrefix="/callback" />
             </intent-filter>
         </activity>
 
-        <activity
-            android:name="com.ym.lite.LibraryActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
+        <activity android:name="com.ym.lite.LibraryActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name="com.ym.lite.AutoActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name="com.ym.lite.TikTokAutoActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name="com.ym.lite.ProfileActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name="com.ym.lite.MainActivity" android:exported="false" android:screenOrientation="portrait" />
 
-        <activity
-            android:name="com.ym.lite.AutoActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
-
-        <activity
-            android:name="com.ym.lite.TikTokAutoActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
-
-        <activity
-            android:name="com.ym.lite.ProfileActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
-
-        <activity
-            android:name="com.ym.lite.MainActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
-
-        <activity
-            android:name="com.ym.lite.FeedActivity"
-            android:exported="true"
-            android:screenOrientation="portrait">
+        <activity android:name="com.ym.lite.FeedActivity" android:exported="true" android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -66,7 +43,9 @@
 
         <service
             android:name="com.ym.lite.automation.YmTikTokAccessibilityService"
-            android:exported="false"
+            android:enabled="true"
+            android:exported="true"
+            android:label="YM Automation"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
