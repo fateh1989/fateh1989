@@ -31,9 +31,7 @@ jobs:
           gradle-version: '8.9'
 
       - name: Apply YM v0.23 source patch
-        run: |
-          python3 ym-ci/android/tools/patch_v023.py
-          python3 ym-ci/android/tools/patch_v023_fix.py
+        run: python3 ym-ci/android/tools/patch_v023_v2.py
 
       - name: Validate YM relay JavaScript
         run: node --check ym-ci/relay/src/index.js
