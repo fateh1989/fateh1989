@@ -1,0 +1,48 @@
+name: YM Permanent Release
+
+on:
+  push:
+    branches:
+      - ym-v0.21-tiktok-lite-target
+    paths:
+      - '.github/workflows/ym-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Verify version metadata
+        run: |
+          grep 'versionCode = 21' ym-ci/android/app/build.gradle.kts
+          grep 'versionName = "0.21.0"' ym-ci/android/app/build.gradle.kts
+
+      - name: Unit tests
+        run: gradle -p ym-ci/android testDebugUnitTest --stacktrace
+
+      - name: Build release baseline APK
+        run: gradle -p ym-ci/android assembleDebug --stacktrace
+
+      - name: Publish permanent GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.21.0 \
+            'ym-ci/android/app/build/outputs/apk/debug/app-debug.apk#YM-v0.21.0.apk' \
+            --target "$GITHUB_SHA" \
+            --title 'YM v0.21.0 — Stable Baseline' \
+            --notes 'Stable baseline for YM. Supports official TikTok packages including TikTok Lite (com.tiktok.lite.go). Android versionCode 21, versionName 0.21.0. Future YM updates should build on top of this baseline.'
