@@ -26,7 +26,6 @@ adb shell getprop ro.build.version.sdk | tee runtime/evidence/android-api.txt
 adb shell getprop ro.product.cpu.abilist | tee runtime/evidence/emulator-abis.txt
 
 adb install -r "$YM_APK"
-
 if [[ ${#TIKTOK_APKS[@]} -eq 1 ]]; then
   adb install -r "${TIKTOK_APKS[0]}"
 else
@@ -38,40 +37,137 @@ if ! grep -q 'package:' runtime/evidence/tiktok-package-path.txt; then
   echo "TikTok official package was not installed" >&2
   exit 12
 fi
-
 adb shell dumpsys package com.zhiliaoapp.musically > runtime/evidence/tiktok-package.txt
 adb shell dumpsys package com.ym.lite.stable > runtime/evidence/ym-package.txt
 
-cat > runtime/ym_auto_comment.xml <<'XML'
+write_auto_pref() {
+  local state="$1"
+  cat > runtime/ym_auto_comment.xml <<XML
 <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
 <map>
-    <boolean name="enabled" value="true" />
+    <boolean name="enabled" value="$state" />
     <int name="min_interval_seconds" value="3" />
 </map>
 XML
-adb push runtime/ym_auto_comment.xml /data/local/tmp/ym_auto_comment.xml
-# Keep both operations inside run-as. The previous single shell line only ran mkdir as the app UID;
-# cp ran as the outer shell and therefore could not resolve the app-private shared_prefs directory.
-adb shell run-as com.ym.lite.stable mkdir -p shared_prefs
-adb shell run-as com.ym.lite.stable cp /data/local/tmp/ym_auto_comment.xml shared_prefs/ym_auto_comment.xml
-adb shell run-as com.ym.lite.stable cat shared_prefs/ym_auto_comment.xml > runtime/evidence/ym-auto-comment-seeded.xml
+  adb push runtime/ym_auto_comment.xml /data/local/tmp/ym_auto_comment.xml >/dev/null
+  adb shell run-as com.ym.lite.stable mkdir -p shared_prefs
+  adb shell run-as com.ym.lite.stable cp /data/local/tmp/ym_auto_comment.xml shared_prefs/ym_auto_comment.xml
+}
 
+capture_stage() {
+  local name="$1"
+  adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
+  adb pull /sdcard/window.xml "runtime/evidence/ui-${name}.xml" >/dev/null 2>&1 || true
+  adb exec-out screencap -p > "runtime/evidence/screen-${name}.png" || true
+  adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' > "runtime/evidence/activity-${name}.txt" || true
+  adb shell dumpsys accessibility > "runtime/evidence/accessibility-${name}.txt" || true
+  adb shell 'run-as com.ym.lite.stable cat shared_prefs/ym_local.xml' > "runtime/evidence/ym-local-${name}.xml" 2>/dev/null || true
+}
+
+tap_safe_label() {
+  local label="$1"
+  adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
+  adb pull /sdcard/window.xml runtime/current-ui.xml >/dev/null 2>&1 || return 1
+  local coords
+  coords="$(python3 - runtime/current-ui.xml "$label" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+path, wanted = sys.argv[1], sys.argv[2].strip().casefold()
+try:
+    root = ET.parse(path).getroot()
+except Exception:
+    raise SystemExit(1)
+for node in root.iter('node'):
+    values = [node.attrib.get('text',''), node.attrib.get('content-desc','')]
+    if any(v.strip().casefold() == wanted for v in values if v):
+        m = re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', node.attrib.get('bounds',''))
+        if m:
+            x1,y1,x2,y2 = map(int, m.groups())
+            print((x1+x2)//2, (y1+y2)//2)
+            raise SystemExit(0)
+raise SystemExit(1)
+PY
+  )" || return 1
+  local x y
+  read -r x y <<<"$coords"
+  echo "safe tap: $label @ $x,$y" | tee -a runtime/evidence/navigation.txt
+  adb shell input tap "$x" "$y"
+  sleep 2
+  return 0
+}
+
+is_feed_visible() {
+  adb shell dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity' > runtime/current-activity.txt || true
+  adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
+  adb pull /sdcard/window.xml runtime/current-ui.xml >/dev/null 2>&1 || true
+  if grep -q 'com.ss.android.ugc.aweme.main.MainActivity' runtime/current-activity.txt && \
+     grep -Eiq 'For You|Following|Home|Friends|comment|comments' runtime/current-ui.xml; then
+    return 0
+  fi
+  return 1
+}
+
+# Keep auto-comment OFF while TikTok is in first-run/login/onboarding screens.
+write_auto_pref false
+adb shell run-as com.ym.lite.stable cat shared_prefs/ym_auto_comment.xml > runtime/evidence/ym-auto-comment-initial.xml
 adb shell appops set com.ym.lite.stable SYSTEM_ALERT_WINDOW allow || true
 adb shell settings put secure enabled_accessibility_services com.ym.lite.stable/com.ym.lite.automation.YmTikTokAccessibilityService
 adb shell settings put secure accessibility_enabled 1
-
 adb shell am start-foreground-service -n com.ym.lite.stable/com.ym.lite.overlay.YmOverlayService || true
-adb shell monkey -p com.zhiliaoapp.musically -c android.intent.category.LAUNCHER 1
-sleep 18
+
+# Start TikTok's real main activity directly. It is allowed to redirect to onboarding; we record that.
+adb shell am start -W -n com.zhiliaoapp.musically/com.ss.android.ugc.aweme.main.MainActivity \
+  > runtime/evidence/main-activity-launch.txt 2>&1 || true
+sleep 12
+capture_stage pre-nav
+
+# Dismiss only non-account system/onboarding controls. Never choose a login provider or enter credentials.
+for round in 1 2 3 4 5 6; do
+  is_feed_visible && break
+  tapped=false
+  for label in "Got it" "Skip" "Not now" "Maybe later" "Continue as guest" "Close" "Later"; do
+    if tap_safe_label "$label"; then
+      tapped=true
+      capture_stage "nav-${round}-${label// /_}"
+      break
+    fi
+  done
+  if [[ "$tapped" == false ]]; then
+    # One controlled Back from TikTok's signup/onboarding screen may return to guest/main feed.
+    if grep -Eq 'I18nSignUpActivity|NewUserJourneyActivity' runtime/current-activity.txt 2>/dev/null; then
+      echo "controlled BACK from onboarding round $round" | tee -a runtime/evidence/navigation.txt
+      adb shell input keyevent KEYCODE_BACK
+      sleep 3
+      capture_stage "nav-${round}-back"
+    else
+      break
+    fi
+  fi
+done
+
+if ! is_feed_visible; then
+  echo "false" > runtime/evidence/feed-reached.txt
+  capture_stage feed-not-reached
+  adb logcat -d -v threadtime > runtime/evidence/logcat.txt || true
+  adb shell pidof com.zhiliaoapp.musically | tee runtime/evidence/tiktok-pid.txt || true
+  echo "TikTok installed and launched, but an unauthenticated feed was not reachable without account interaction."
+  exit 0
+fi
+
+echo "true" > runtime/evidence/feed-reached.txt
+capture_stage feed-ready
+
+# Only after a real feed is visible do we enable button 4 and reconnect Accessibility so prefs reload cleanly.
+adb shell settings put secure enabled_accessibility_services '' || true
+adb shell settings put secure accessibility_enabled 0 || true
+write_auto_pref true
+adb shell run-as com.ym.lite.stable cat shared_prefs/ym_auto_comment.xml > runtime/evidence/ym-auto-comment-enabled.xml
+adb shell settings put secure enabled_accessibility_services com.ym.lite.stable/com.ym.lite.automation.YmTikTokAccessibilityService
+adb shell settings put secure accessibility_enabled 1
+sleep 4
 
 for i in 1 2 3 4 5 6; do
-  echo "=== cycle $i ==="
-  adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
-  adb pull /sdcard/window.xml "runtime/evidence/ui-$i.xml" >/dev/null 2>&1 || true
-  adb exec-out screencap -p > "runtime/evidence/screen-$i.png" || true
-  adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' > "runtime/evidence/activity-$i.txt" || true
-  adb shell dumpsys accessibility > "runtime/evidence/accessibility-$i.txt" || true
-  adb shell 'run-as com.ym.lite.stable cat shared_prefs/ym_local.xml' > "runtime/evidence/ym-local-$i.xml" 2>/dev/null || true
+  echo "=== feed cycle $i ==="
+  capture_stage "$i"
   grep -Eio 'comment|comments|add comment|write comment|send|post|تعليق|تعليقات|إرسال|نشر' "runtime/evidence/ui-$i.xml" | sort -u > "runtime/evidence/comment-tokens-$i.txt" || true
   if [[ $i -lt 6 ]]; then
     adb shell input swipe 540 1600 540 500 350 || true
@@ -88,4 +184,4 @@ if [[ ! -s runtime/evidence/tiktok-pid.txt ]]; then
   exit 13
 fi
 
-echo "Direct TikTok runtime probe completed"
+echo "Direct TikTok runtime feed probe completed"
