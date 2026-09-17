@@ -124,11 +124,16 @@ class TikTokAutoActivity : AppCompatActivity() {
 
         body.addView(actionButton("إيقاف TikTok AUTO") {
             prefs.edit().putBoolean("enabled", false).putBoolean("pending_launch", false).apply()
-            localPrefs.edit().putString("last_auto_action", "AUTO متوقف").apply()
+            localPrefs.edit()
+                .putString("last_auto_stage", "auto_off")
+                .putString("last_auto_action", "AUTO متوقف")
+                .apply()
             YmTikTokAccessibilityService.notifyConfigChanged()
             render()
             Toast.makeText(this, "تم إيقاف TikTok AUTO", Toast.LENGTH_SHORT).show()
         }, matchWrap())
+
+        body.addView(actionButton("تحديث التشخيص") { render() }, matchWrap())
 
         body.addView(actionButton("تصفير عدادات AUTO") {
             localPrefs.edit()
@@ -137,6 +142,8 @@ class TikTokAutoActivity : AppCompatActivity() {
                 .remove("stat_comment_ok")
                 .remove("stat_comment_fail")
                 .remove("last_auto_action")
+                .remove("last_auto_stage")
+                .remove("last_auto_stage_at")
                 .apply()
             render()
             YmTikTokAccessibilityService.notifyConfigChanged()
@@ -191,6 +198,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         val scrollFail = localPrefs.getInt("stat_scroll_fail", 0)
         val commentOk = localPrefs.getInt("stat_comment_ok", 0)
         val commentFail = localPrefs.getInt("stat_comment_fail", 0)
+        val lastStage = localPrefs.getString("last_auto_stage", "").orEmpty()
         val lastAction = localPrefs.getString("last_auto_action", "").orEmpty()
         val overlayError = localPrefs.getString("last_overlay_error", "").orEmpty()
 
@@ -202,16 +210,11 @@ class TikTokAutoActivity : AppCompatActivity() {
             append(if (commentState) "مفعّلة ($count)" else "متوقفة")
             append("\nتمرير ناجح: $scrollOk")
             append(" | فشل: $scrollFail")
-            append("\nتعليق ناجح: $commentOk")
+            append("\nتعليق ناجح مؤكد: $commentOk")
             append(" | فشل: $commentFail")
-            if (lastAction.isNotBlank()) {
-                append("\nآخر حدث: ")
-                append(lastAction)
-            }
-            if (overlayError.isNotBlank()) {
-                append("\nخطأ الزر العائم: ")
-                append(overlayError)
-            }
+            if (lastStage.isNotBlank()) append("\nمرحلة التشخيص: $lastStage")
+            if (lastAction.isNotBlank()) append("\nآخر حدث: $lastAction")
+            if (overlayError.isNotBlank()) append("\nخطأ الزر العائم: $overlayError")
         }
         status.setTextColor(if (running && access) Color.rgb(37, 244, 238) else Color.WHITE)
     }
