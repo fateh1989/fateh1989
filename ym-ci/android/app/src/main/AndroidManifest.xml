@@ -10,17 +10,8 @@
         <package android:name="com.ss.android.ugc.trill" />
     </queries>
 
-    <application
-        android:allowBackup="false"
-        android:label="YM"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.YM">
-
-        <activity
-            android:name="com.ym.lite.TikTokConnectActivity"
-            android:exported="true"
-            android:launchMode="singleTask"
-            android:screenOrientation="portrait">
+    <application android:allowBackup="false" android:label="YM" android:supportsRtl="true" android:theme="@style/Theme.YM">
+        <activity android:name="com.ym.lite.TikTokConnectActivity" android:exported="true" android:launchMode="singleTask" android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -28,13 +19,12 @@
                 <data android:scheme="https" android:host="open-platform.tiktokapis.com" android:pathPrefix="/callback" />
             </intent-filter>
         </activity>
-
         <activity android:name="com.ym.lite.LibraryActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name="com.ym.lite.AutoActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name="com.ym.lite.ProfileActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name="com.ym.lite.MainActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name="com.ym.lite.FeedActivity" android:exported="false" android:screenOrientation="portrait" />
-
+        <activity android:name="com.ym.lite.comment.CommentWheelActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name="com.ym.lite.TikTokAutoActivity" android:exported="true" android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -42,13 +32,20 @@
             </intent-filter>
         </activity>
 
+        <service android:name="com.ym.lite.overlay.YmOverlayService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-started floating YM controls overlay" />
+        </service>
+
         <service
-            android:name="com.ym.lite.overlay.YmOverlayService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="User-started floating YM controls overlay" />
+            android:name="com.ym.lite.automation.YmTikTokAccessibilityService"
+            android:enabled="true"
+            android:exported="true"
+            android:label="YM Auto Comment"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/ym_accessibility_service" />
         </service>
     </application>
 </manifest>
