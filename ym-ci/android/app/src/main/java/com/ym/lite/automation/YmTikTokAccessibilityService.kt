@@ -13,6 +13,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.Toast
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -30,27 +31,48 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private var comments: List<String> = emptyList()
     private var commentIndex = 0
     private var minIntervalMs = 3_000L
+
     private var inFlight = false
+    private var panelOpened = false
     private var pendingText = ""
     private var textConfirmed = false
-    private var panelOpened = false
-    private var editorActivated = false
-    private var composerTapTried = false
-    private var sendTapStep = 0
+    private var pendingVideoAdvance = false
+    private var videoEpoch = 0L
+    private var attemptedEpoch = -1L
     private var lastFinishedAt = 0L
-    private var ignoreEventsUntil = 0L
+    private var lastOutcomeSuccess = false
+    private var retryAfterFailureAt = Long.MAX_VALUE
+    private var composerTapIndex = 0
+    private var sendTapIndex = 0
+    private var lastToastAt = 0L
 
-    private val feedDebounce = object : Runnable {
+    private val attemptRunnable = object : Runnable {
         override fun run() {
             if (!enabled || inFlight || !hasTikTokWindow()) return
             val now = SystemClock.uptimeMillis()
-            if (now < ignoreEventsUntil) return
             val wait = (lastFinishedAt + minIntervalMs - now).coerceAtLeast(0L)
             if (wait > 0L) {
                 handler.postDelayed(this, wait)
                 return
             }
-            if (!strictCommentPanelOpen()) beginComment("new_video")
+
+            val newVideoPending = videoEpoch > attemptedEpoch
+            val retryFailedVideo = !lastOutcomeSuccess && now >= retryAfterFailureAt
+            if (newVideoPending || retryFailedVideo) {
+                beginComment(if (newVideoPending) "video_$videoEpoch" else "retry_failed_video")
+            }
+        }
+    }
+
+    private val watchdog = object : Runnable {
+        override fun run() {
+            if (enabled && !inFlight && hasTikTokWindow()) {
+                val now = SystemClock.uptimeMillis()
+                if ((!lastOutcomeSuccess && now >= retryAfterFailureAt) || videoEpoch > attemptedEpoch) {
+                    scheduleAttempt(120L)
+                }
+            }
+            handler.postDelayed(this, 700L)
         }
     }
 
@@ -58,18 +80,25 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         reloadFromPrefs()
-        record("engine_ready", "محرك زر 4 جاهز")
+        handler.removeCallbacks(watchdog)
+        handler.post(watchdog)
+        record("engine_ready", "محرك زر 4 الجديد جاهز")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null || !TikTokScope.isAllowed(event.packageName)) return
-        if (!enabled || inFlight) return
-        if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
-            val now = SystemClock.uptimeMillis()
-            if (now < ignoreEventsUntil) return
-            handler.removeCallbacks(feedDebounce)
-            handler.postDelayed(feedDebounce, 500L)
+        if (event == null || !TikTokScope.isAllowed(event.packageName) || !enabled) return
+
+        val isFeedAdvance = event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
+            event.eventType == AccessibilityEvent.TYPE_VIEW_SELECTED
+        if (!isFeedAdvance) return
+
+        if (inFlight) {
+            // Do not lose a real feed transition that happened during a closing/cooldown phase.
+            if (!panelOpened) pendingVideoAdvance = true
+            return
         }
+
+        markNewVideo("accessibility_event")
     }
 
     override fun onInterrupt() = Unit
@@ -92,116 +121,139 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             .ifEmpty { YmCommentDefaults.all }
         commentIndex = localPrefs.getInt("comment_index", 0).coerceAtLeast(0)
 
-        handler.removeCallbacks(feedDebounce)
+        handler.removeCallbacks(attemptRunnable)
+
         if (!enabled) {
             resetFlight()
+            retryAfterFailureAt = Long.MAX_VALUE
             record("auto_off", "زر 4 متوقف")
             return
         }
 
         if (!wasEnabled) {
-            record("auto_on", "زر 4 يعمل: بدء محاولة تعليق مباشرة")
-            handler.postDelayed({
-                if (enabled && !inFlight && hasTikTokWindow()) beginComment("button4_on")
-            }, 850L)
+            lastOutcomeSuccess = false
+            retryAfterFailureAt = Long.MAX_VALUE
+            videoEpoch += 1
+            record("auto_on", "زر 4 يعمل؛ تجهيز أول تعليق")
+            scheduleAttempt(850L)
         }
+    }
+
+    private fun markNewVideo(reason: String) {
+        videoEpoch += 1
+        record("video_seen", "فيديو جديد: $reason / $videoEpoch")
+        scheduleAttempt(520L)
+    }
+
+    private fun scheduleAttempt(delayMs: Long) {
+        handler.removeCallbacks(attemptRunnable)
+        handler.postDelayed(attemptRunnable, delayMs)
     }
 
     private fun beginComment(reason: String) {
         if (!enabled || inFlight || comments.isEmpty() || !hasTikTokWindow()) return
         inFlight = true
+        attemptedEpoch = videoEpoch
+        panelOpened = false
         pendingText = comments[commentIndex % comments.size]
         textConfirmed = false
-        panelOpened = false
-        editorActivated = false
-        composerTapTried = false
-        sendTapStep = 0
-        record("comment_start", "بدء تعليق من الدولاب: $reason")
+        composerTapIndex = 0
+        sendTapIndex = 0
+        record("comment_start", "بدء تعليق زر 4: $reason")
         openComments(0)
     }
 
     private fun openComments(attempt: Int) {
         if (!enabled || !hasTikTokWindow()) {
-            fail("tiktok_missing", "نافذة TikTok غير متاحة")
+            fail("tiktok_missing", "TikTok غير متاح")
             return
         }
 
-        val button = bestNodeAcrossTikTok(::commentButtonScore, 12)
+        val button = bestNodeAcrossTikTok(::commentButtonScore, 14)
         if (clickNode(button)) {
             panelOpened = true
-            record("comment_opened", "تم فتح نافذة التعليقات")
+            record("comment_opened", "تم فتح التعليقات")
             handler.postDelayed({ activateComposer(0) }, 520L)
             return
         }
 
-        if (attempt < 5) {
-            handler.postDelayed({ openComments(attempt + 1) }, 240L)
-        } else {
-            fail("comment_button_missing", "لم يجد YM زر التعليقات الجانبي")
+        if (attempt < 4) {
+            handler.postDelayed({ openComments(attempt + 1) }, 220L)
+            return
         }
+
+        // Arabic/RTL TikTok places the action rail on the left on this device.
+        val leftFirst = attempt == 4
+        val dm = resources.displayMetrics
+        val x = dm.widthPixels * if (leftFirst) 0.045f else 0.955f
+        val y = dm.heightPixels * 0.705f
+        if (attempt <= 5) {
+            record("comment_direct_tap", if (leftFirst) "نقر مباشر على زر التعليقات يسار الشاشة" else "تجربة زر التعليقات يمين الشاشة")
+            dispatchTap(x, y) {
+                panelOpened = true
+                handler.postDelayed({ activateComposer(0) }, 650L)
+            }
+            return
+        }
+
+        fail("comment_button_missing", "لم يتمكن YM من فتح التعليقات")
     }
 
     private fun activateComposer(attempt: Int) {
         if (!enabled || !hasTikTokWindow()) {
-            fail("tiktok_missing", "اختفت نافذة TikTok بعد فتح التعليقات")
+            fail("tiktok_missing", "اختفت نافذة TikTok")
             return
         }
 
         val editor = findEditorAcrossTikTok()
         if (editor != null) {
-            editorActivated = true
             focusEditor(editor)
-            record("editor_found", "تم العثور على حقل كتابة حقيقي")
+            record("editor_found", "تم العثور على حقل التعليق")
             handler.postDelayed({ writeComment(0) }, 160L)
             return
         }
 
-        val entry = bestNodeAcrossTikTok(::composerEntryScore, 14)
-        if (entry != null && attempt <= 6) {
-            val clicked = clickNode(entry)
-            if (clicked) editorActivated = true
-            record(
-                if (clicked) "composer_clicked" else "composer_retry",
-                if (clicked) "تم ضغط خانة إضافة تعليق" else "وجد YM خانة التعليق ولم تُضغط بعد",
-            )
+        val entry = bestNodeAcrossTikTok(::composerEntryScore, 12)
+        if (entry != null && attempt < 4) {
+            clickNode(entry)
+            record("composer_clicked", "تم ضغط خانة إضافة تعليق")
             handler.postDelayed({ activateComposer(attempt + 1) }, 300L)
             return
         }
 
-        if (!composerTapTried && attempt >= 2) {
-            composerTapTried = true
-            editorActivated = true
+        if (composerTapIndex < 2) {
             val dm = resources.displayMetrics
-            val x = dm.widthPixels * 0.50f
-            val y = dm.heightPixels * 0.92f
-            record("composer_direct_tap", "نقر مباشر على شريط إضافة تعليق أسفل النافذة")
-            dispatchTap(x, y) {
+            val yFractions = floatArrayOf(0.915f, 0.945f)
+            val y = dm.heightPixels * yFractions[composerTapIndex]
+            composerTapIndex += 1
+            setClipboardText()
+            record("composer_direct_tap", "نقر مباشر على شريط التعليق ${composerTapIndex}/2")
+            dispatchTap(dm.widthPixels * 0.50f, y) {
                 handler.postDelayed({ activateComposer(attempt + 1) }, 420L)
             }
             return
         }
 
-        if (attempt < 14) {
-            handler.postDelayed({ activateComposer(attempt + 1) }, 250L)
-        } else {
-            fail("editor_missing", "فتحت التعليقات لكن لم يظهر محرر نص قابل للكتابة")
+        if (attempt < 8) {
+            handler.postDelayed({ activateComposer(attempt + 1) }, 260L)
+            return
         }
+
+        pasteThroughContextMenu()
     }
 
     private fun writeComment(attempt: Int) {
         val editor = findEditorAcrossTikTok()
         if (editor == null) {
-            if (attempt < 5) {
+            if (attempt < 3) {
                 handler.postDelayed({ activateComposer(attempt + 1) }, 220L)
             } else {
-                fail("editor_lost", "اختفى حقل التعليق قبل الكتابة")
+                pasteThroughContextMenu()
             }
             return
         }
 
-        editorActivated = true
         focusEditor(editor)
-
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, pendingText)
         }
@@ -211,100 +263,111 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             return
         }
 
-        if (pasteInto(editor)) {
-            record("text_paste", "تم إدخال تعليق الدولاب بالنسخ واللصق")
+        setClipboardText()
+        if (editor.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
+            record("text_paste", "تم لصق تعليق الدولاب")
             handler.postDelayed({ verifyText(0) }, 300L)
             return
         }
 
-        if (attempt < 4) {
-            handler.postDelayed({ writeComment(attempt + 1) }, 230L)
+        if (attempt < 2) {
+            handler.postDelayed({ writeComment(attempt + 1) }, 240L)
         } else {
-            fail("write_failed", "TikTok رفض الكتابة المباشرة واللصق")
+            pasteThroughContextMenu()
         }
     }
-
-    private fun pasteInto(editor: AccessibilityNodeInfo): Boolean = runCatching {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("YM comment", pendingText))
-        focusEditor(editor)
-        editor.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-    }.getOrDefault(false)
 
     private fun verifyText(attempt: Int) {
         val editor = findEditorAcrossTikTok()
         if (editor == null) {
-            if (attempt < 5) handler.postDelayed({ verifyText(attempt + 1) }, 220L)
-            else fail("text_unverified", "لم يستطع YM تأكيد النص داخل الحقل")
+            if (attempt < 3) handler.postDelayed({ verifyText(attempt + 1) }, 220L)
+            else pasteThroughContextMenu()
             return
         }
 
         val actual = normalize(editor.text?.toString().orEmpty())
         val expected = normalize(pendingText)
-        if (actual == expected && expected.isNotEmpty()) {
+        if (actual == expected && expected.isNotBlank()) {
             textConfirmed = true
-            record("text_confirmed", "تم تأكيد تعليق الدولاب داخل TikTok")
+            record("text_confirmed", "تم تأكيد نص تعليق الدولاب")
             handler.postDelayed({ sendComment(0) }, 160L)
             return
         }
 
-        if (actual.isNotEmpty() && actual != expected) {
-            fail("foreign_text", "ظهر نص مختلف عن تعليق الدولاب؛ لن يتم إرساله")
+        if (actual.isNotBlank() && actual != expected) {
+            fail("foreign_text", "ظهر نص مختلف عن تعليق الدولاب")
             return
         }
 
-        if (attempt < 3) handler.postDelayed({ writeComment(attempt + 1) }, 220L)
-        else fail("text_missing", "تعليق الدولاب لم يظهر في الحقل")
+        if (attempt < 2) handler.postDelayed({ writeComment(attempt + 1) }, 220L)
+        else pasteThroughContextMenu()
+    }
+
+    private fun pasteThroughContextMenu() {
+        if (!inFlight || !enabled) return
+        setClipboardText()
+        val dm = resources.displayMetrics
+        val x = dm.widthPixels * 0.50f
+        val y = dm.heightPixels * 0.92f
+        record("context_paste_start", "محاولة لصق تعليق الدولاب عبر قائمة Paste")
+        dispatchLongPress(x, y) {
+            handler.postDelayed({
+                val paste = bestNodeAcrossAllWindows(::pasteMenuScore, 10)
+                if (clickNode(paste)) {
+                    textConfirmed = true
+                    record("context_paste_ok", "تم اختيار لصق من قائمة النظام")
+                    handler.postDelayed({ sendComment(0) }, 280L)
+                } else {
+                    fail("paste_menu_missing", "لم يجد YM أمر لصق بعد فتح خانة التعليق")
+                }
+            }, 420L)
+        }
     }
 
     private fun sendComment(attempt: Int) {
         if (!textConfirmed) {
-            fail("send_blocked", "منع الإرسال لأن النص غير مؤكد")
+            fail("send_blocked", "النص غير مؤكد")
             return
         }
 
         val editor = findEditorAcrossTikTok()
-        if (editor == null) {
-            fail("editor_before_send_missing", "اختفى حقل التعليق قبل الإرسال")
+        if (editor != null) {
+            val send = findSendNearEditor(editor)
+                ?: bestNodeAcrossTikTok(::sendScore, 10)
+                ?: findSendByGeometry(editor)
+            if (clickNode(send)) {
+                record("send_clicked", "تم ضغط نشر التعليق")
+                handler.postDelayed({ verifySubmitted(0) }, 380L)
+                return
+            }
+        } else {
+            val send = bestNodeAcrossTikTok(::sendScore, 10)
+            if (clickNode(send)) {
+                record("send_clicked", "تم ضغط نشر التعليق")
+                handler.postDelayed({ verifySubmitted(0) }, 380L)
+                return
+            }
+        }
+
+        if (attempt < 2) {
+            handler.postDelayed({ sendComment(attempt + 1) }, 220L)
             return
         }
 
-        val actual = normalize(editor.text?.toString().orEmpty())
-        if (actual != normalize(pendingText)) {
-            fail("text_changed", "تغير النص قبل النشر")
-            return
-        }
-
-        val send = findSendNearEditor(editor)
-            ?: bestNodeAcrossTikTok(::sendScore, 10)
-            ?: findSendByGeometry(editor)
-
-        if (send != null && clickNode(send)) {
-            record("send_clicked", "تم ضغط زر نشر التعليق")
-            handler.postDelayed({ verifySubmitted(0) }, 400L)
-            return
-        }
-
-        if (attempt >= 2) {
-            directSend(editor, leftSide = true)
-            return
-        }
-
-        handler.postDelayed({ sendComment(attempt + 1) }, 220L)
+        directSend()
     }
 
-    private fun directSend(editor: AccessibilityNodeInfo, leftSide: Boolean) {
-        if (!textConfirmed || !inFlight) return
-        val bounds = Rect()
-        editor.getBoundsInScreen(bounds)
+    private fun directSend() {
+        if (!inFlight || !textConfirmed) return
         val dm = resources.displayMetrics
-        val x = dm.widthPixels * if (leftSide) 0.08f else 0.92f
+        val xFractions = floatArrayOf(0.08f, 0.92f)
+        val x = dm.widthPixels * xFractions[sendTapIndex.coerceIn(0, 1)]
+        val editor = findEditorAcrossTikTok()
+        val bounds = Rect()
+        editor?.getBoundsInScreen(bounds)
         val y = if (!bounds.isEmpty) bounds.centerY().toFloat() else dm.heightPixels * 0.92f
-        sendTapStep = if (leftSide) 1 else 2
-        record(
-            if (leftSide) "send_tap_left" else "send_tap_right",
-            if (leftSide) "تجربة زر الإرسال يسار حقل التعليق" else "تجربة زر الإرسال يمين حقل التعليق",
-        )
+        sendTapIndex += 1
+        record("send_direct_tap", "تجربة زر الإرسال ${sendTapIndex}/2")
         dispatchTap(x, y) {
             handler.postDelayed({ verifySubmitted(0) }, 420L)
         }
@@ -324,60 +387,50 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             return
         }
 
-        if (attempt < 4) {
-            handler.postDelayed({ verifySubmitted(attempt + 1) }, 240L)
+        if (attempt < 3) {
+            handler.postDelayed({ verifySubmitted(attempt + 1) }, 220L)
             return
         }
 
-        when (sendTapStep) {
-            0 -> directSend(editor, leftSide = true)
-            1 -> directSend(editor, leftSide = false)
-            else -> fail("send_unconfirmed", "بقي النص داخل الحقل بعد محاولات الإرسال")
-        }
+        if (sendTapIndex < 2) directSend()
+        else fail("send_unconfirmed", "بقي النص داخل الحقل بعد محاولات النشر")
     }
 
     private fun succeed() {
         commentIndex += 1
         localPrefs.edit().putInt("comment_index", commentIndex).apply()
         bump("stat_comment_ok")
-        record("comment_ok", "تم نشر تعليق من الدولاب")
+        lastOutcomeSuccess = true
+        retryAfterFailureAt = Long.MAX_VALUE
         lastFinishedAt = SystemClock.uptimeMillis()
-        ignoreEventsUntil = lastFinishedAt + 1_500L
-        closeAfterAttempt(success = true, backCount = 0)
+        record("comment_ok", "تم نشر تعليق من الدولاب")
+        closePanel(success = true, backCount = 0)
     }
 
     private fun fail(code: String, message: String) {
         bump("stat_comment_fail")
-        record(code, message)
+        lastOutcomeSuccess = false
         lastFinishedAt = SystemClock.uptimeMillis()
-        ignoreEventsUntil = lastFinishedAt + 1_200L
-        closeAfterAttempt(success = false, backCount = 0)
+        retryAfterFailureAt = lastFinishedAt + minIntervalMs.coerceAtLeast(2_500L)
+        record(code, message)
+        showFailure(message)
+        closePanel(success = false, backCount = 0)
     }
 
-    private fun closeAfterAttempt(success: Boolean, backCount: Int) {
+    private fun closePanel(success: Boolean, backCount: Int) {
         if (!panelOpened) {
             resetFlight()
             return
         }
 
-        if (backCount > 0 && !strictCommentPanelOpen()) {
-            record(
-                if (success) "panel_closed" else "failure_panel_closed",
-                if (success) "تم النشر وإغلاق نافذة التعليقات" else "تم إغلاق نافذة التعليقات بعد فشل المحاولة",
-            )
-            resetFlight()
-            return
-        }
-
-        val maxBacks = if (editorActivated) 3 else 2
-        if (backCount >= maxBacks) {
-            record("panel_close_finished", "انتهت محاولات إغلاق لوحة المفاتيح/التعليقات")
+        if (backCount >= 3) {
+            record(if (success) "panel_closed" else "failure_panel_closed", "انتهت محاولات إغلاق نافذة التعليقات")
             resetFlight()
             return
         }
 
         performGlobalAction(GLOBAL_ACTION_BACK)
-        handler.postDelayed({ closeAfterAttempt(success, backCount + 1) }, 420L)
+        handler.postDelayed({ closePanel(success, backCount + 1) }, 360L)
     }
 
     private fun resetFlight() {
@@ -385,28 +438,39 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         textConfirmed = false
         inFlight = false
         panelOpened = false
-        editorActivated = false
-        composerTapTried = false
-        sendTapStep = 0
+        composerTapIndex = 0
+        sendTapIndex = 0
+
+        if (pendingVideoAdvance) {
+            pendingVideoAdvance = false
+            markNewVideo("queued_during_previous_attempt")
+        } else if (!lastOutcomeSuccess && enabled) {
+            scheduleAttempt((retryAfterFailureAt - SystemClock.uptimeMillis()).coerceAtLeast(200L))
+        }
     }
 
     private fun tiktokRoots(): List<AccessibilityNodeInfo> {
-        val result = mutableListOf<AccessibilityNodeInfo>()
+        val roots = mutableListOf<AccessibilityNodeInfo>()
         val active = rootInActiveWindow
-        if (active != null && TikTokScope.isAllowed(active.packageName)) result += active
+        if (active != null && TikTokScope.isAllowed(active.packageName)) roots += active
         windows.forEach { window ->
             val root = runCatching { window.root }.getOrNull() ?: return@forEach
-            if (TikTokScope.isAllowed(root.packageName) && result.none { it === root }) result += root
+            if (TikTokScope.isAllowed(root.packageName) && roots.none { it === root }) roots += root
         }
-        return result
+        return roots
+    }
+
+    private fun allRoots(): List<AccessibilityNodeInfo> {
+        val roots = mutableListOf<AccessibilityNodeInfo>()
+        rootInActiveWindow?.let { roots += it }
+        windows.forEach { window ->
+            val root = runCatching { window.root }.getOrNull() ?: return@forEach
+            if (roots.none { it === root }) roots += root
+        }
+        return roots
     }
 
     private fun hasTikTokWindow(): Boolean = tiktokRoots().isNotEmpty()
-
-    private fun strictCommentPanelOpen(): Boolean {
-        if (findEditorAcrossTikTok() != null) return true
-        return bestNodeAcrossTikTok(::composerEntryScore, 14) != null
-    }
 
     private fun findEditorAcrossTikTok(): AccessibilityNodeInfo? {
         tiktokRoots().forEach { root ->
@@ -423,11 +487,29 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         var best: AccessibilityNodeInfo? = null
         var bestScore = minScore - 1
         tiktokRoots().forEach { root ->
-            walk(root, 800) { node ->
+            walk(root, 850) { node ->
                 val score = scorer(node)
                 if (score > bestScore) {
-                    bestScore = score
                     best = node
+                    bestScore = score
+                }
+            }
+        }
+        return best
+    }
+
+    private fun bestNodeAcrossAllWindows(
+        scorer: (AccessibilityNodeInfo) -> Int,
+        minScore: Int,
+    ): AccessibilityNodeInfo? {
+        var best: AccessibilityNodeInfo? = null
+        var bestScore = minScore - 1
+        allRoots().forEach { root ->
+            walk(root, 850) { node ->
+                val score = scorer(node)
+                if (score > bestScore) {
+                    best = node
+                    bestScore = score
                 }
             }
         }
@@ -438,14 +520,13 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         if (!node.isEnabled || node.isEditable) return 0
         val t = token(node)
         var score = 0
-        if (t.contains("read or add comments")) score += 60
-        if (t.contains("view comments") || t.contains("open comments")) score += 50
+        if (t.contains("read or add comments")) score += 70
+        if (t.contains("view comments") || t.contains("open comments")) score += 55
         if (containsAny(t, "comments", "comment", "kommentarer", "kommentar", "تعليقات", "التعليقات", "تعليق")) score += 18
-        if (node.viewIdResourceName?.contains("comment", true) == true) score += 22
-        if (node.contentDescription?.toString()?.contains("comment", true) == true) score += 18
-        if (node.isClickable || supports(node, AccessibilityNodeInfo.ACTION_CLICK)) score += 6
+        if (node.viewIdResourceName?.contains("comment", true) == true) score += 24
+        if (node.contentDescription?.toString()?.contains("comment", true) == true) score += 20
+        if (node.isClickable || supports(node, AccessibilityNodeInfo.ACTION_CLICK)) score += 7
         if (isButtonLike(node)) score += 4
-
         val b = Rect()
         node.getBoundsInScreen(b)
         if (!b.isEmpty) {
@@ -462,28 +543,21 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         val t = token(node)
         if (containsAny(t, "read or add comments", "view comments", "open comments")) return 0
         if (containsAny(t, "suggested", "suggestion", "quick reply", "recommended", "اقتراح", "مقترح")) return 0
-
+        val b = Rect()
+        node.getBoundsInScreen(b)
+        val dm = resources.displayMetrics
+        val bottomWide = !b.isEmpty && b.centerY() > dm.heightPixels * 0.58f && b.width() > dm.widthPixels * 0.22f
         val structural = node.isEditable ||
             node.className?.toString()?.contains("EditText", true) == true ||
             supports(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
             supports(node, AccessibilityNodeInfo.ACTION_PASTE)
-
-        val b = Rect()
-        node.getBoundsInScreen(b)
-        val dm = resources.displayMetrics
-        val bottomWide = !b.isEmpty &&
-            b.centerY() > dm.heightPixels * 0.58f &&
-            b.width() > dm.widthPixels * 0.24f
-
-        if (!structural && !bottomWide) return 0
-
+        if (!bottomWide && !structural) return 0
         var score = 0
-        if (containsAny(t, "add comment", "add a comment", "write a comment", "write comment", "comment here", "say something", "kommentera", "skriv en kommentar", "lägg till kommentar", "أضف تعليق", "اكتب تعليق")) score += 36
-        if (node.viewIdResourceName?.let { containsAny(it.lowercase(), "comment_input", "comment_editor", "comment_compose", "comment_text") } == true) score += 24
-        if (structural) score += 24
-        if (bottomWide) score += 14
-        if (node.isFocusable) score += 3
-        if (node.isClickable) score += 2
+        if (containsAny(t, "add comment", "add a comment", "write a comment", "write comment", "comment here", "say something", "kommentera", "skriv en kommentar", "lägg till kommentar", "أضف تعليق", "اكتب تعليق")) score += 40
+        if (structural) score += 28
+        if (bottomWide) score += 16
+        if (node.isFocusable) score += 4
+        if (node.isClickable) score += 3
         return score
     }
 
@@ -491,20 +565,15 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         if (!node.isEnabled) return 0
         val t = token(node)
         if (containsAny(t, "read or add comments", "view comments", "open comments")) return 0
-        if (containsAny(t, "suggested", "suggestion", "quick reply", "recommended", "اقتراح", "مقترح")) return 0
-
         val structural = node.isEditable ||
             node.className?.toString()?.contains("EditText", true) == true ||
             supports(node, AccessibilityNodeInfo.ACTION_SET_TEXT) ||
             supports(node, AccessibilityNodeInfo.ACTION_PASTE)
         if (!structural) return 0
-
         val b = Rect()
         node.getBoundsInScreen(b)
         val dm = resources.displayMetrics
-        val bottom = b.isEmpty || b.centerY() > dm.heightPixels * 0.52f || node.isFocused
-        if (!bottom) return 0
-
+        if (!b.isEmpty && !node.isFocused && b.centerY() < dm.heightPixels * 0.50f) return 0
         var score = 30
         if (node.isEditable) score += 36
         if (node.className?.toString()?.contains("EditText", true) == true) score += 24
@@ -519,22 +588,24 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         if (!node.isEnabled || node.isEditable) return 0
         val t = token(node)
         val l = label(node)
-        if (containsAny(t, "suggested", "suggestion", "quick reply", "recommended", "اقتراح", "مقترح")) return 0
         var score = 0
-        if (containsAny(t, "send_comment", "post_comment", "submit_comment", "comment_send", "comment_post")) score += 44
-        if (l in setOf("send", "post", "publish", "submit", "skicka", "publicera", "إرسال", "نشر")) score += 36
-        if (containsAny(t, "send comment", "post comment", "publish comment", "submit comment", "skicka", "publicera", "إرسال", "نشر")) score += 18
-        if (node.viewIdResourceName?.let { containsAny(it.lowercase(), "send", "post", "submit") } == true) score += 18
+        if (containsAny(t, "send_comment", "post_comment", "submit_comment", "comment_send", "comment_post")) score += 46
+        if (l in setOf("send", "post", "publish", "submit", "skicka", "publicera", "إرسال", "نشر")) score += 38
+        if (containsAny(t, "send comment", "post comment", "publish comment", "submit comment", "skicka", "publicera", "إرسال", "نشر")) score += 20
+        if (node.viewIdResourceName?.let { containsAny(it.lowercase(), "send", "post", "submit") } == true) score += 20
         if (node.isClickable || supports(node, AccessibilityNodeInfo.ACTION_CLICK)) score += 5
         if (isButtonLike(node)) score += 3
         return score
     }
 
-    private fun focusEditor(editor: AccessibilityNodeInfo) {
-        editor.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        if (editor.isClickable || supports(editor, AccessibilityNodeInfo.ACTION_CLICK)) {
-            editor.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-        }
+    private fun pasteMenuScore(node: AccessibilityNodeInfo): Int {
+        if (!node.isEnabled) return 0
+        val l = label(node)
+        var score = 0
+        if (l == "paste" || l == "لصق" || l == "klistra in") score += 60
+        if (containsAny(l, "paste", "لصق", "klistra in")) score += 25
+        if (node.isClickable || supports(node, AccessibilityNodeInfo.ACTION_CLICK)) score += 8
+        return score
     }
 
     private fun findSendNearEditor(editor: AccessibilityNodeInfo): AccessibilityNodeInfo? {
@@ -552,11 +623,10 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         val eb = Rect()
         editor.getBoundsInScreen(eb)
         if (eb.isEmpty) return null
-
         var best: AccessibilityNodeInfo? = null
         var bestScore = Int.MIN_VALUE
         tiktokRoots().forEach { root ->
-            walk(root, 800) { node ->
+            walk(root, 850) { node ->
                 if (!node.isEnabled || node.isEditable) return@walk
                 if (!node.isClickable && !supports(node, AccessibilityNodeInfo.ACTION_CLICK)) return@walk
                 val t = token(node)
@@ -565,21 +635,35 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 node.getBoundsInScreen(b)
                 if (b.isEmpty) return@walk
                 val vertical = abs(b.centerY() - eb.centerY())
-                if (vertical > dp(85)) return@walk
+                if (vertical > dp(90)) return@walk
                 val gap = when {
                     b.right <= eb.left -> eb.left - b.right
                     b.left >= eb.right -> b.left - eb.right
                     else -> return@walk
                 }
-                if (gap > dp(140)) return@walk
-                val score = 260 - gap - vertical + sendScore(node) * 4
+                if (gap > dp(150)) return@walk
+                val score = 280 - gap - vertical + sendScore(node) * 4
                 if (score > bestScore) {
-                    bestScore = score
                     best = node
+                    bestScore = score
                 }
             }
         }
         return best
+    }
+
+    private fun setClipboardText() {
+        runCatching {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("YM comment", pendingText))
+        }
+    }
+
+    private fun focusEditor(editor: AccessibilityNodeInfo) {
+        editor.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        if (editor.isClickable || supports(editor, AccessibilityNodeInfo.ACTION_CLICK)) {
+            editor.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        }
     }
 
     private fun dispatchTap(x: Float, y: Float, after: () -> Unit) {
@@ -587,6 +671,18 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0L, 70L))
             .build()
+        dispatchGestureWithCallback(gesture, after)
+    }
+
+    private fun dispatchLongPress(x: Float, y: Float, after: () -> Unit) {
+        val path = Path().apply { moveTo(x, y) }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0L, 650L))
+            .build()
+        dispatchGestureWithCallback(gesture, after)
+    }
+
+    private fun dispatchGestureWithCallback(gesture: GestureDescription, after: () -> Unit) {
         val callback = object : GestureResultCallback() {
             override fun onCompleted(gestureDescription: GestureDescription?) {
                 super.onCompleted(gestureDescription)
@@ -607,11 +703,11 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     ): AccessibilityNodeInfo? {
         var best: AccessibilityNodeInfo? = null
         var bestScore = minScore - 1
-        walk(root, 800) { node ->
+        walk(root, 850) { node ->
             val score = scorer(node)
             if (score > bestScore) {
-                bestScore = score
                 best = node
+                bestScore = score
             }
         }
         return best
@@ -621,7 +717,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         var visited = 0
         fun visit(node: AccessibilityNodeInfo) {
             if (visited >= limit) return
-            visited++
+            visited += 1
             block(node)
             for (i in 0 until node.childCount) {
                 if (visited >= limit) return
@@ -666,9 +762,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             .trim()
     }
 
-    private fun normalize(text: String): String = text
-        .trim()
-        .replace(Regex("\\s+"), " ")
+    private fun normalize(text: String): String = text.trim().replace(Regex("\\s+"), " ")
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
 
@@ -682,5 +776,12 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             .putString("last_auto_action", message)
             .putLong("last_auto_stage_at", System.currentTimeMillis())
             .apply()
+    }
+
+    private fun showFailure(message: String) {
+        val now = SystemClock.uptimeMillis()
+        if (now - lastToastAt < 3_000L) return
+        lastToastAt = now
+        Toast.makeText(this, "YM4: $message", Toast.LENGTH_SHORT).show()
     }
 }
