@@ -33,8 +33,13 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private var autoComment = false
     private var intervalMs = 8_000L
     private var commentEvery = 3
+    private var maxCommentsPerSession = 5
+    private var commentGapMs = 60_000L
     private var scrollCount = 0
     private var commentIndex = 0
+    private var commentsSent = 0
+    private var lastCommentAt = 0L
+    private var gestureInFlight = false
     private var comments: List<String> = emptyList()
 
     private val loop = object : Runnable { override fun run() = tick() }
@@ -67,12 +72,25 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     }
 
     fun reloadFromPrefs() {
+        val wasEnabled = enabled
         enabled = prefs.getBoolean("enabled", false)
         autoComment = prefs.getBoolean("auto_comment", false)
         intervalMs = prefs.getInt("interval_sec", 8).coerceIn(3, 120) * 1000L
         commentEvery = prefs.getInt("comment_every", 3).coerceIn(1, 100)
+        maxCommentsPerSession = prefs.getInt("max_comments_session", 5).coerceIn(1, 50)
+        commentGapMs = prefs.getInt("comment_gap_sec", 60).coerceIn(30, 3600) * 1000L
         comments = localPrefs.getString("comment_pool", "").orEmpty()
             .lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+
+        if (enabled && !wasEnabled) {
+            scrollCount = 0
+            commentIndex = 0
+            commentsSent = 0
+            lastCommentAt = 0L
+            gestureInFlight = false
+        }
+        if (!enabled) gestureInFlight = false
+
         handler.removeCallbacks(loop)
         updateOverlayText()
         if (enabled) handler.postDelayed(loop, 800)
@@ -82,12 +100,23 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         enabled = prefs.getBoolean("enabled", false)
         autoComment = prefs.getBoolean("auto_comment", false)
         if (!enabled) return
+        if (gestureInFlight) {
+            handler.postDelayed(loop, 250)
+            return
+        }
         if (currentTikTokRoot() == null) {
             removeOverlay()
             handler.postDelayed(loop, 500)
             return
         }
-        val shouldComment = autoComment && comments.isNotEmpty() && ((scrollCount + 1) % commentEvery == 0)
+
+        val now = System.currentTimeMillis()
+        val commentDueByVideo = (scrollCount + 1) % commentEvery == 0
+        val commentDueByTime = now - lastCommentAt >= commentGapMs
+        val withinSessionLimit = commentsSent < maxCommentsPerSession
+        val shouldComment = autoComment && comments.isNotEmpty() && commentDueByVideo &&
+            commentDueByTime && withinSessionLimit
+
         if (shouldComment) attemptComment { handler.postDelayed({ swipeAndContinue() }, 500) }
         else swipeAndContinue()
     }
@@ -99,6 +128,8 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             handler.postDelayed(loop, 500)
             return
         }
+        if (gestureInFlight) return
+
         val dm = resources.displayMetrics
         val path = Path().apply {
             moveTo(dm.widthPixels / 2f, dm.heightPixels * 0.79f)
@@ -106,17 +137,45 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         }
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0, 180)).build()
+
         if (currentTikTokRoot() == null) {
             handler.postDelayed(loop, 500)
             return
         }
-        dispatchGesture(gesture, null, null)
-        scrollCount++
-        updateOverlayText()
-        handler.postDelayed(loop, intervalMs)
+
+        gestureInFlight = true
+        val accepted = dispatchGesture(
+            gesture,
+            object : AccessibilityService.GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    gestureInFlight = false
+                    if (!prefs.getBoolean("enabled", false) || currentTikTokRoot() == null) {
+                        handler.postDelayed(loop, 500)
+                        return
+                    }
+                    scrollCount++
+                    updateOverlayText()
+                    handler.postDelayed(loop, intervalMs)
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    gestureInFlight = false
+                    handler.postDelayed(loop, 800)
+                }
+            },
+            null,
+        )
+
+        if (!accepted) {
+            gestureInFlight = false
+            handler.postDelayed(loop, 800)
+        }
     }
 
     private fun attemptComment(done: () -> Unit) {
+        if (commentsSent >= maxCommentsPerSession) { done(); return }
+        if (System.currentTimeMillis() - lastCommentAt < commentGapMs) { done(); return }
+
         val root = currentTikTokRoot() ?: run { done(); return }
         val commentButton = findNode(root) { node ->
             val label = nodeLabel(node)
@@ -149,6 +208,9 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 }
                 if (clickNode(send)) {
                     commentIndex++
+                    commentsSent++
+                    lastCommentAt = System.currentTimeMillis()
+                    updateOverlayText()
                     handler.postDelayed({ safeBackIfTikTok(); done() }, 350)
                 } else {
                     safeBackIfTikTok(); done()
@@ -237,7 +299,11 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     }
 
     private fun updateOverlayText() {
-        overlay?.text = if (prefs.getBoolean("enabled", false)) "YM\n● $scrollCount" else "YM\n○"
+        overlay?.text = if (prefs.getBoolean("enabled", false)) {
+            "YM\n● $scrollCount\n💬 $commentsSent"
+        } else {
+            "YM\n○"
+        }
     }
 
     private fun removeOverlay() {
