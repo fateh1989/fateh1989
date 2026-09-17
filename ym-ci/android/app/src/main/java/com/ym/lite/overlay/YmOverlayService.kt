@@ -91,7 +91,7 @@ class YmOverlayService : Service() {
             text = label
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            textSize = 15f
+            textSize = 14f
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(Color.argb(235, 18, 18, 18))
@@ -105,11 +105,11 @@ class YmOverlayService : Service() {
             gravity = Gravity.CENTER
         }
 
-        val ym = button("YM")
-        val comment = button("💬")
-        val settings = button("⚙")
-        val fourth = button("④")
-        val fifth = button("⑤")
+        val ym = button("1\nYM")
+        val comment = button("2\n💬")
+        val settings = button("3\n⚙")
+        val fourth = button("4")
+        val fifth = button("5")
 
         listOf(ym, comment, settings, fourth, fifth).forEachIndexed { index, view ->
             stack.addView(
