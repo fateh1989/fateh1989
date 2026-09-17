@@ -33,6 +33,49 @@ class TikTokAutoActivity : AppCompatActivity() {
     private lateinit var commentGapSeconds: EditText
     private lateinit var commentPool: EditText
 
+    private val templatePacks = linkedMapOf(
+        "إعجاب" to listOf(
+            "جميل جدًا 🔥",
+            "فيديو رائع 👏",
+            "محتوى جميل جدًا",
+            "أحسنت 👌",
+            "لقطة جميلة جدًا",
+            "استمر 🔥",
+            "عمل ممتاز 👏",
+            "مبدع كالعادة",
+        ),
+        "دعم" to listOf(
+            "استمر، محتواك جميل 👏",
+            "بالتوفيق دائمًا 🌟",
+            "مستوى جميل، كمل 🔥",
+            "ننتظر المزيد 👌",
+            "أحسنت، استمر بنفس المستوى",
+            "دعم كامل لك 🙌",
+            "محتوى يستحق المتابعة",
+            "واصل، شغل جميل جدًا",
+        ),
+        "سؤال" to listOf(
+            "كيف سويت هذا؟",
+            "وين المكان؟",
+            "ممكن تفاصيل أكثر؟",
+            "من وين الفكرة؟",
+            "هل عندك جزء ثاني؟",
+            "كم أخذ منك وقت؟",
+            "هل تنصح نجربها؟",
+            "ممكن تشرح الطريقة؟",
+        ),
+        "عام" to listOf(
+            "رائع 👌",
+            "جميل جدًا",
+            "حلو 🔥",
+            "ممتاز 👏",
+            "فكرة جميلة",
+            "لقطة موفقة",
+            "محتوى مرتب",
+            "استمر 👍",
+        ),
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(buildScreen())
@@ -101,14 +144,26 @@ class TikTokAutoActivity : AppCompatActivity() {
         commentGapSeconds = numberField("60")
         body.addView(commentGapSeconds, matchWrap())
 
-        body.addView(label("دولاب التعليقات — كل سطر تعليق مستقل"))
+        body.addView(label("قوالب تعليقات جاهزة"))
+        body.addView(templateRow("إعجاب", "دعم"), matchWrap())
+        body.addView(templateRow("سؤال", "عام"), matchWrap())
+        body.addView(actionButton("خلط كل القوالب") {
+            val mixed = templatePacks.values.flatten().distinct()
+            commentPool.setText(mixed.joinToString("\n"))
+            Toast.makeText(this, "تم تحميل ${mixed.size} تعليقًا جاهزًا", Toast.LENGTH_SHORT).show()
+        }, matchWrap())
+        body.addView(actionButton("مسح التعليقات") {
+            commentPool.setText("")
+        }, matchWrap())
+
+        body.addView(label("دولاب التعليقات — كل سطر تعليق مستقل ويمكنك تعديل القوالب"))
         commentPool = EditText(this).apply {
             hint = "مثال:\nجميل جدًا 🔥\nاستمر 👏"
             setHintTextColor(Color.DKGRAY)
             setTextColor(Color.WHITE)
             textSize = 16f
             gravity = Gravity.TOP or Gravity.START
-            minLines = 5
+            minLines = 7
             background = roundedBox()
             setPadding(dp(12), dp(10), dp(12), dp(10))
         }
@@ -148,6 +203,29 @@ class TikTokAutoActivity : AppCompatActivity() {
         }, matchWrap())
 
         return scroll
+    }
+
+    private fun templateRow(first: String, second: String): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 2f
+            addView(templateButton(first), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = dp(4)
+            })
+            addView(templateButton(second), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(4)
+            })
+        }
+    }
+
+    private fun templateButton(name: String) = Button(this).apply {
+        text = name
+        isAllCaps = false
+        setOnClickListener {
+            val pack = templatePacks[name].orEmpty()
+            commentPool.setText(pack.joinToString("\n"))
+            Toast.makeText(this@TikTokAutoActivity, "تم تحميل قالب $name (${pack.size})", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun loadSettings() {
