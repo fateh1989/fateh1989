@@ -9,7 +9,9 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.Gravity
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -29,11 +31,12 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private var overlay: TextView? = null
     private var enabled = false
     private var autoComment = false
-    private var intervalMs = 8_000L
-    private var commentEvery = 3
+    private var intervalMs = 4_000L
+    private var commentEvery = 1
     private var scrollCount = 0
     private var commentIndex = 0
     private var comments: List<String> = emptyList()
+    private var lastTikTokSeenAt = 0L
 
     private val loop = object : Runnable {
         override fun run() = tick()
@@ -41,8 +44,8 @@ class YmTikTokAccessibilityService : AccessibilityService() {
 
     private val scopeWatch = object : Runnable {
         override fun run() {
-            if (currentTikTokRoot() == null) removeOverlay() else ensureOverlay()
-            handler.postDelayed(this, 250)
+            if (isTikTokForeground()) ensureOverlay() else removeOverlay()
+            handler.postDelayed(this, 300)
         }
     }
 
@@ -55,7 +58,12 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (currentTikTokRoot() == null) removeOverlay() else ensureOverlay()
+        if (TikTokScope.isAllowed(event?.packageName)) {
+            lastTikTokSeenAt = SystemClock.uptimeMillis()
+            ensureOverlay()
+        } else if (!isTikTokForeground()) {
+            removeOverlay()
+        }
     }
 
     override fun onInterrupt() = Unit
@@ -69,26 +77,27 @@ class YmTikTokAccessibilityService : AccessibilityService() {
 
     fun reloadFromPrefs() {
         enabled = prefs.getBoolean("enabled", false)
-        autoComment = prefs.getBoolean("auto_comment", false)
-        intervalMs = prefs.getInt("interval_sec", 8).coerceIn(3, 120) * 1000L
-        commentEvery = prefs.getInt("comment_every", 3).coerceIn(1, 100)
+        autoComment = prefs.getBoolean("auto_comment", true)
+        intervalMs = prefs.getInt("interval_sec", 4).coerceIn(3, 120) * 1000L
+        commentEvery = prefs.getInt("comment_every", 1).coerceIn(1, 100)
         comments = localPrefs.getString("comment_pool", "").orEmpty()
             .lineSequence()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .toList()
+            .ifEmpty { YmCommentDefaults.all }
 
         handler.removeCallbacks(loop)
-        updateOverlayText()
-        if (enabled) handler.postDelayed(loop, 800)
+        updateOverlayAppearance()
+        if (enabled) handler.postDelayed(loop, 700)
     }
 
     private fun tick() {
         enabled = prefs.getBoolean("enabled", false)
-        autoComment = prefs.getBoolean("auto_comment", false)
+        autoComment = prefs.getBoolean("auto_comment", true)
         if (!enabled) return
 
-        if (currentTikTokRoot() == null) {
+        if (!isTikTokForeground()) {
             removeOverlay()
             handler.postDelayed(loop, 500)
             return
@@ -97,7 +106,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         val shouldComment = autoComment && comments.isNotEmpty() && ((scrollCount + 1) % commentEvery == 0)
         if (shouldComment) {
             attemptComment {
-                handler.postDelayed({ swipeAndContinue() }, 500)
+                handler.postDelayed({ swipeAndContinue() }, 450)
             }
         } else {
             swipeAndContinue()
@@ -106,7 +115,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
 
     private fun swipeAndContinue() {
         if (!prefs.getBoolean("enabled", false)) return
-        if (currentTikTokRoot() == null) {
+        if (!isTikTokForeground()) {
             removeOverlay()
             handler.postDelayed(loop, 500)
             return
@@ -121,17 +130,17 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             lineTo(x, endY)
         }
         val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0, 180))
+            .addStroke(GestureDescription.StrokeDescription(path, 0, 190))
             .build()
 
-        if (currentTikTokRoot() == null) {
+        if (!isTikTokForeground()) {
             handler.postDelayed(loop, 500)
             return
         }
 
         dispatchGesture(gesture, null, null)
         scrollCount++
-        updateOverlayText()
+        updateOverlayAppearance()
         handler.postDelayed(loop, intervalMs)
     }
 
@@ -185,7 +194,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                     safeBackIfTikTok()
                     done()
                 }
-            }, 300)
+            }, 320)
         }, 650)
     }
 
@@ -194,11 +203,20 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         return root.takeIf { TikTokScope.isAllowed(it.packageName) }
     }
 
+    private fun isTikTokForeground(): Boolean {
+        val root = rootInActiveWindow
+        if (root != null && TikTokScope.isAllowed(root.packageName)) {
+            lastTikTokSeenAt = SystemClock.uptimeMillis()
+            return true
+        }
+        return SystemClock.uptimeMillis() - lastTikTokSeenAt < 1_500L
+    }
+
     private fun clickNode(node: AccessibilityNodeInfo?): Boolean {
-        if (currentTikTokRoot() == null) return false
+        if (!isTikTokForeground()) return false
         var current = node ?: return false
-        repeat(5) {
-            if (currentTikTokRoot() == null) return false
+        repeat(6) {
+            if (!isTikTokForeground()) return false
             if (current.isClickable && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
             current = current.parent ?: return false
         }
@@ -223,55 +241,71 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     }
 
     private fun safeBackIfTikTok() {
-        if (currentTikTokRoot() != null) performGlobalAction(GLOBAL_ACTION_BACK)
+        if (isTikTokForeground()) performGlobalAction(GLOBAL_ACTION_BACK)
     }
 
     private fun ensureOverlay() {
         if (overlay != null) {
-            updateOverlayText()
+            updateOverlayAppearance()
             return
         }
+
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         val density = resources.displayMetrics.density
+        val size = (76 * density).roundToInt()
         val button = TextView(this).apply {
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            textSize = 12f
-            setPadding(
-                (12 * density).roundToInt(),
-                (9 * density).roundToInt(),
-                (12 * density).roundToInt(),
-                (9 * density).roundToInt(),
-            )
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.argb(224, 15, 15, 15))
-                setStroke((2 * density).roundToInt(), Color.rgb(37, 244, 238))
-            }
+            textSize = 19f
+            maxLines = 2
+            isClickable = true
+            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
             setOnClickListener {
-                if (currentTikTokRoot() == null) return@setOnClickListener
+                if (!isTikTokForeground()) return@setOnClickListener
                 val next = !prefs.getBoolean("enabled", false)
-                prefs.edit().putBoolean("enabled", next).apply()
+                val edit = prefs.edit().putBoolean("enabled", next)
+                if (next) {
+                    edit.putBoolean("auto_comment", true)
+                    edit.putInt("comment_every", 1)
+                }
+                edit.apply()
                 reloadFromPrefs()
             }
         }
         val lp = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            size,
+            size,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            x = (10 * density).roundToInt()
+            x = (12 * density).roundToInt()
         }
-        wm.addView(button, lp)
-        overlay = button
-        updateOverlayText()
+
+        runCatching {
+            wm.addView(button, lp)
+            overlay = button
+            localPrefs.edit().remove("last_overlay_error").apply()
+            updateOverlayAppearance()
+        }.onFailure { error ->
+            localPrefs.edit().putString("last_overlay_error", error.javaClass.simpleName + ": " + error.message.orEmpty()).apply()
+            overlay = null
+        }
     }
 
-    private fun updateOverlayText() {
-        overlay?.text = if (prefs.getBoolean("enabled", false)) "AUTO\n● $scrollCount" else "AUTO\n○"
+    private fun updateOverlayAppearance() {
+        val view = overlay ?: return
+        val active = prefs.getBoolean("enabled", false)
+        view.text = if (active) "🎡\nON" else "🎡\nOFF"
+        view.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(if (active) Color.rgb(0, 125, 110) else Color.argb(232, 18, 18, 18))
+            setStroke(
+                (2 * resources.displayMetrics.density).roundToInt(),
+                if (active) Color.rgb(37, 244, 238) else Color.rgb(220, 220, 220),
+            )
+        }
     }
 
     private fun removeOverlay() {
