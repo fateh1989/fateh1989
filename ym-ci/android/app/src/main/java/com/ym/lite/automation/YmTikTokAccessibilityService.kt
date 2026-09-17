@@ -45,6 +45,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private var composerTapIndex = 0
     private var sendTapIndex = 0
     private var lastToastAt = 0L
+    private var lastTikTokActivity = ""
 
     private val attemptRunnable = object : Runnable {
         override fun run() {
@@ -86,7 +87,14 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null || !TikTokScope.isAllowed(event.packageName) || !enabled) return
+        if (event == null || !TikTokScope.isAllowed(event.packageName)) return
+
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val className = event.className?.toString().orEmpty()
+            if (className.endsWith("Activity")) lastTikTokActivity = className
+        }
+
+        if (!enabled) return
 
         val isFeedAdvance = event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
             event.eventType == AccessibilityEvent.TYPE_VIEW_SELECTED
@@ -152,6 +160,11 @@ class YmTikTokAccessibilityService : AccessibilityService() {
 
     private fun beginComment(reason: String) {
         if (!enabled || inFlight || comments.isEmpty() || !hasTikTokWindow()) return
+        if (isKnownNonFeedTikTokScreen()) {
+            record("waiting_for_feed", "YM ينتظر شاشة فيديو TikTok قبل التعليق")
+            scheduleAttempt(1_200L)
+            return
+        }
         inFlight = true
         attemptedEpoch = videoEpoch
         panelOpened = false
@@ -494,6 +507,41 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     }
 
     private fun hasTikTokWindow(): Boolean = tiktokRoots().isNotEmpty()
+
+    private fun isKnownNonFeedTikTokScreen(): Boolean {
+        val activity = lastTikTokActivity
+        if (activity.contains("com.ss.android.ugc.aweme.main.MainActivity")) return false
+        if (
+            activity.contains("I18nSignUpActivity") ||
+            activity.contains("NewUserJourneyActivity")
+        ) return true
+
+        var blocked = false
+        tiktokRoots().forEach { root ->
+            walk(root, 450) { node ->
+                if (blocked) return@walk
+                val value = token(node)
+                if (
+                    containsAny(
+                        value,
+                        "sign up for tiktok",
+                        "already have an account",
+                        "use phone or email",
+                        "continue with google",
+                        "continue with facebook",
+                        "when’s your birthdate",
+                        "when's your birthdate",
+                        "year picker",
+                        "tiktok's terms and policies",
+                        "agree and continue",
+                    )
+                ) {
+                    blocked = true
+                }
+            }
+        }
+        return blocked
+    }
 
     private fun findEditorAcrossTikTok(): AccessibilityNodeInfo? {
         tiktokRoots().forEach { root ->
