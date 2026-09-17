@@ -19,6 +19,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.ym.lite.automation.TikTokScope
+import com.ym.lite.automation.YmCommentDefaults
 import com.ym.lite.automation.YmTikTokAccessibilityService
 
 class TikTokAutoActivity : AppCompatActivity() {
@@ -65,7 +66,7 @@ class TikTokAutoActivity : AppCompatActivity() {
             setTypeface(typeface, Typeface.BOLD)
         })
         body.addView(TextView(this).apply {
-            text = "التحكم يعمل فقط داخل نافذة TikTok النشطة. خارج TikTok لا ينفّذ YM تمريرًا ولا ضغطًا ولا رجوعًا."
+            text = "الدولاب العائم يظهر داخل TikTok فقط. ضغطة واحدة تشغّل أو توقف التعليق والتمرير معًا."
             setTextColor(Color.LTGRAY)
             textSize = 14f
             gravity = Gravity.CENTER
@@ -76,7 +77,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         body.addView(status, matchWrap().apply { bottomMargin = dp(14) })
 
         body.addView(label("زمن الانتقال بين الفيديوهات — من 3 إلى 120 ثانية"))
-        interval = numberField("8")
+        interval = numberField("4")
         body.addView(interval, matchWrap())
 
         autoComment = Switch(this).apply {
@@ -88,7 +89,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         body.addView(autoComment, matchWrap())
 
         body.addView(label("ضع تعليقًا كل كم فيديو؟"))
-        commentEvery = numberField("3")
+        commentEvery = numberField("1")
         body.addView(commentEvery, matchWrap())
 
         body.addView(label("دولاب التعليقات — كل سطر تعليق مستقل"))
@@ -141,15 +142,16 @@ class TikTokAutoActivity : AppCompatActivity() {
     }
 
     private fun loadSettings() {
-        interval.setText(prefs.getInt("interval_sec", 8).toString())
-        autoComment.isChecked = prefs.getBoolean("auto_comment", false)
-        commentEvery.setText(prefs.getInt("comment_every", 3).toString())
-        commentPool.setText(localPrefs.getString("comment_pool", "").orEmpty())
+        interval.setText(prefs.getInt("interval_sec", 4).toString())
+        autoComment.isChecked = prefs.getBoolean("auto_comment", true)
+        commentEvery.setText(prefs.getInt("comment_every", 1).toString())
+        val stored = localPrefs.getString("comment_pool", "").orEmpty()
+        commentPool.setText(if (stored.isBlank()) YmCommentDefaults.all.joinToString("\n") else stored)
     }
 
     private fun saveSettings(masterEnabled: Boolean) {
-        val seconds = interval.text.toString().toIntOrNull()?.coerceIn(3, 120) ?: 8
-        val every = commentEvery.text.toString().toIntOrNull()?.coerceIn(1, 100) ?: 3
+        val seconds = interval.text.toString().toIntOrNull()?.coerceIn(3, 120) ?: 4
+        val every = commentEvery.text.toString().toIntOrNull()?.coerceIn(1, 100) ?: 1
         interval.setText(seconds.toString())
         commentEvery.setText(every.toString())
         prefs.edit()
@@ -167,15 +169,21 @@ class TikTokAutoActivity : AppCompatActivity() {
         if (!::status.isInitialized) return
         val access = isAccessibilityEnabled()
         val running = prefs.getBoolean("enabled", false)
-        val commentState = prefs.getBoolean("auto_comment", false)
+        val commentState = prefs.getBoolean("auto_comment", true)
         val count = localPrefs.getString("comment_pool", "").orEmpty()
             .lineSequence().count { it.isNotBlank() }
+            .takeIf { it > 0 } ?: YmCommentDefaults.all.size
+        val overlayError = localPrefs.getString("last_overlay_error", "").orEmpty()
         status.text = buildString {
             append(if (running) "● TikTok AUTO يعمل" else "○ TikTok AUTO متوقف")
             append("\nإمكانية الوصول: ")
             append(if (access) "مفعّلة" else "غير مفعّلة")
             append("\nالتعليقات: ")
             append(if (commentState) "مفعّلة ($count)" else "متوقفة")
+            if (overlayError.isNotBlank()) {
+                append("\nخطأ الزر العائم: ")
+                append(overlayError)
+            }
         }
         status.setTextColor(if (running && access) Color.rgb(37, 244, 238) else Color.WHITE)
     }
