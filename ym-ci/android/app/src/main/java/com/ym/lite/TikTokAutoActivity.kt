@@ -26,6 +26,7 @@ class TikTokAutoActivity : AppCompatActivity() {
     private val localPrefs by lazy { getSharedPreferences("ym_local", MODE_PRIVATE) }
 
     private lateinit var status: TextView
+    private lateinit var sessionDuration: EditText
     private lateinit var interval: EditText
     private lateinit var autoComment: Switch
     private lateinit var commentEvery: EditText
@@ -60,7 +61,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         scroll.addView(body, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         body.addView(TextView(this).apply {
-            text = "TikTok AUTO"
+            text = "YM AUTOPILOT"
             setTextColor(Color.WHITE)
             textSize = 28f
             gravity = Gravity.CENTER
@@ -68,7 +69,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         })
 
         body.addView(TextView(this).apply {
-            text = "التحكم يعمل فقط داخل TikTok. دولاب التعليقات مخصص للدعم والتشجيع فقط."
+            text = "حدد مدة الجلسة، ثم اترك YM يشاهد ويقلب ويستخدم دولاب الدعم داخل TikTok فقط."
             setTextColor(Color.LTGRAY)
             textSize = 14f
             gravity = Gravity.CENTER
@@ -78,12 +79,18 @@ class TikTokAutoActivity : AppCompatActivity() {
         status = cardText()
         body.addView(status, matchWrap().apply { bottomMargin = dp(14) })
 
+        body.addView(label("مدة جلسة AUTOPILOT بالدقائق — تتوقف الجلسة تلقائيًا عند انتهائها"))
+        sessionDuration = numberField("60")
+        body.addView(sessionDuration, matchWrap())
+        body.addView(durationRow(15, 30), matchWrap())
+        body.addView(durationRow(60, 120), matchWrap())
+
         body.addView(label("زمن الانتقال بين الفيديوهات — من 3 إلى 120 ثانية"))
         interval = numberField("8")
         body.addView(interval, matchWrap())
 
         autoComment = Switch(this).apply {
-            text = "تعليق تلقائي"
+            text = "تعليقات دعم تلقائية"
             setTextColor(Color.WHITE)
             textSize = 16f
             setPadding(0, dp(14), 0, dp(8))
@@ -125,14 +132,14 @@ class TikTokAutoActivity : AppCompatActivity() {
 
         body.addView(actionButton("حفظ الإعدادات") {
             saveSettings(prefs.getBoolean("enabled", false))
-            Toast.makeText(this, "تم حفظ إعدادات TikTok AUTO", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "تم حفظ إعدادات AUTOPILOT", Toast.LENGTH_SHORT).show()
         }, matchWrap())
 
-        body.addView(actionButton("تشغيل TikTok AUTO") {
+        body.addView(actionButton("▶ تشغيل AUTOPILOT") {
             saveSettings(true)
             if (!isAccessibilityEnabled()) {
                 prefs.edit().putBoolean("pending_launch", true).apply()
-                Toast.makeText(this, "فعّل خدمة YM Automation ثم ارجع؛ سيفتح TikTok تلقائيًا", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "فعّل خدمة YM Automation ثم ارجع؛ سيبدأ AUTOPILOT ويفتح TikTok", Toast.LENGTH_LONG).show()
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             } else {
                 launchTikTok()
@@ -140,11 +147,15 @@ class TikTokAutoActivity : AppCompatActivity() {
             render()
         }, matchWrap())
 
-        body.addView(actionButton("إيقاف TikTok AUTO") {
-            prefs.edit().putBoolean("enabled", false).putBoolean("pending_launch", false).apply()
+        body.addView(actionButton("■ إيقاف AUTOPILOT") {
+            prefs.edit()
+                .putBoolean("enabled", false)
+                .putBoolean("pending_launch", false)
+                .putLong("session_end_at", 0L)
+                .apply()
             YmTikTokAccessibilityService.notifyConfigChanged()
             render()
-            Toast.makeText(this, "تم إيقاف TikTok AUTO", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "تم إيقاف AUTOPILOT", Toast.LENGTH_SHORT).show()
         }, matchWrap())
 
         body.addView(actionButton("فتح إعدادات إمكانية الوصول") {
@@ -157,6 +168,25 @@ class TikTokAutoActivity : AppCompatActivity() {
         }, matchWrap())
 
         return scroll
+    }
+
+    private fun durationRow(first: Int, second: Int): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 2f
+            addView(durationButton(first), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = dp(4)
+            })
+            addView(durationButton(second), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(4)
+            })
+        }
+    }
+
+    private fun durationButton(minutes: Int) = Button(this).apply {
+        text = if (minutes >= 60) "${minutes / 60} ساعة" else "$minutes دقيقة"
+        isAllCaps = false
+        setOnClickListener { sessionDuration.setText(minutes.toString()) }
     }
 
     private fun templateRow(first: String, second: String): LinearLayout {
@@ -189,6 +219,7 @@ class TikTokAutoActivity : AppCompatActivity() {
     }
 
     private fun loadSettings() {
+        sessionDuration.setText(prefs.getInt("session_duration_min", 60).toString())
         interval.setText(prefs.getInt("interval_sec", 8).toString())
         autoComment.isChecked = prefs.getBoolean("auto_comment", false)
         commentEvery.setText(prefs.getInt("comment_every", 3).toString())
@@ -198,11 +229,13 @@ class TikTokAutoActivity : AppCompatActivity() {
     }
 
     private fun saveSettings(masterEnabled: Boolean) {
+        val durationMinutes = sessionDuration.text.toString().toIntOrNull()?.coerceIn(1, 1440) ?: 60
         val seconds = interval.text.toString().toIntOrNull()?.coerceIn(3, 120) ?: 8
         val every = commentEvery.text.toString().toIntOrNull()?.coerceIn(1, 100) ?: 3
         val maxComments = maxCommentsSession.text.toString().toIntOrNull()?.coerceIn(1, 50) ?: 5
         val gapSeconds = commentGapSeconds.text.toString().toIntOrNull()?.coerceIn(30, 3600) ?: 60
 
+        sessionDuration.setText(durationMinutes.toString())
         interval.setText(seconds.toString())
         commentEvery.setText(every.toString())
         maxCommentsSession.setText(maxComments.toString())
@@ -211,6 +244,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         prefs.edit()
             .putBoolean("enabled", masterEnabled)
             .putBoolean("auto_comment", autoComment.isChecked)
+            .putInt("session_duration_min", durationMinutes)
             .putInt("interval_sec", seconds)
             .putInt("comment_every", every)
             .putInt("max_comments_session", maxComments)
@@ -231,9 +265,12 @@ class TikTokAutoActivity : AppCompatActivity() {
             .lineSequence().count { it.isNotBlank() }
         val maxComments = prefs.getInt("max_comments_session", 5)
         val gap = prefs.getInt("comment_gap_sec", 60)
+        val duration = prefs.getInt("session_duration_min", 60)
 
         status.text = buildString {
-            append(if (running) "● TikTok AUTO يعمل" else "○ TikTok AUTO متوقف")
+            append(if (running) "● AUTOPILOT يعمل" else "○ AUTOPILOT متوقف")
+            append("\nمدة الجلسة: ")
+            append(formatMinutes(duration))
             append("\nإمكانية الوصول: ")
             append(if (access) "مفعّلة" else "غير مفعّلة")
             append("\nالتعليقات: ")
@@ -241,6 +278,12 @@ class TikTokAutoActivity : AppCompatActivity() {
             if (commentState) append(" — حد الجلسة $maxComments — فاصل ${gap}ث")
         }
         status.setTextColor(if (running && access) Color.rgb(37, 244, 238) else Color.WHITE)
+    }
+
+    private fun formatMinutes(minutes: Int): String = when {
+        minutes < 60 -> "$minutes دقيقة"
+        minutes % 60 == 0 -> "${minutes / 60} ساعة"
+        else -> "${minutes / 60} ساعة و${minutes % 60} دقيقة"
     }
 
     private fun isAccessibilityEnabled(): Boolean {
