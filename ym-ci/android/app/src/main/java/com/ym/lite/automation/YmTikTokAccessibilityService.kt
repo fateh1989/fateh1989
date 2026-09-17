@@ -423,14 +423,38 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             return
         }
 
-        if (backCount >= 3) {
-            record(if (success) "panel_closed" else "failure_panel_closed", "انتهت محاولات إغلاق نافذة التعليقات")
+        if (backCount >= 2) {
+            record(
+                if (success) "panel_close_guard" else "failure_panel_close_guard",
+                "توقف الإغلاق بأمان بعد محاولتين لمنع الخروج من TikTok",
+            )
             resetFlight()
             return
         }
 
         performGlobalAction(GLOBAL_ACTION_BACK)
-        handler.postDelayed({ closePanel(success, backCount + 1) }, 360L)
+        handler.postDelayed({
+            if (!hasTikTokWindow()) {
+                record("panel_close_guard", "توقف الإغلاق لأن نافذة TikTok لم تعد متاحة")
+                resetFlight()
+                return@postDelayed
+            }
+
+            if (!isCommentPanelVisible()) {
+                record(
+                    if (success) "panel_closed" else "failure_panel_closed",
+                    "تم إغلاق نافذة التعليقات",
+                )
+                resetFlight()
+            } else {
+                closePanel(success, backCount + 1)
+            }
+        }, 420L)
+    }
+
+    private fun isCommentPanelVisible(): Boolean {
+        if (findEditorAcrossTikTok() != null) return true
+        return bestNodeAcrossTikTok(::composerEntryScore, 12) != null
     }
 
     private fun resetFlight() {
