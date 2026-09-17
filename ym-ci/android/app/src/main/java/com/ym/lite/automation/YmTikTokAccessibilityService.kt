@@ -11,10 +11,12 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.TextView
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 class YmTikTokAccessibilityService : AccessibilityService() {
@@ -28,6 +30,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private val localPrefs by lazy { getSharedPreferences("ym_local", MODE_PRIVATE) }
 
     private var overlay: TextView? = null
+    private var overlayParams: WindowManager.LayoutParams? = null
     private var enabled = false
     private var autoComment = false
     private var intervalMs = 4_000L
@@ -135,64 +138,144 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             return
         }
 
-        dispatchGesture(gesture, null, null)
-        scrollCount++
-        updateOverlayAppearance()
-        handler.postDelayed(loop, intervalMs)
+        val accepted = dispatchGesture(
+            gesture,
+            object : AccessibilityService.GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    scrollCount++
+                    bumpStat("stat_scroll_ok")
+                    recordAction("تمرير ناجح")
+                    updateOverlayAppearance()
+                    if (prefs.getBoolean("enabled", false)) {
+                        handler.postDelayed(loop, intervalMs)
+                    }
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    bumpStat("stat_scroll_fail")
+                    recordAction("فشل التمرير")
+                    updateOverlayAppearance()
+                    if (prefs.getBoolean("enabled", false)) {
+                        handler.postDelayed(loop, 700)
+                    }
+                }
+            },
+            handler,
+        )
+
+        if (!accepted) {
+            bumpStat("stat_scroll_fail")
+            recordAction("رفض Android إيماءة التمرير")
+            updateOverlayAppearance()
+            handler.postDelayed(loop, 700)
+        }
     }
 
     private fun attemptComment(done: () -> Unit) {
-        val root = currentTikTokRoot() ?: run { done(); return }
-        val commentButton = findNode(root) { node ->
-            val label = nodeLabel(node)
-            label.contains("comment") || label.contains("تعليق") || label.contains("kommentar")
-        }
-        if (!clickNode(commentButton)) {
+        val root = currentTikTokRoot() ?: run {
+            commentFailure("نافذة TikTok غير متاحة")
             done()
             return
         }
 
-        handler.postDelayed(openEditor@{
-            val editorRoot = currentTikTokRoot() ?: run { done(); return@openEditor }
-            val editor = findNode(editorRoot) { node ->
-                node.isEditable || node.className?.toString()?.contains("EditText") == true
-            }
-            if (editor == null) {
+        val commentButton = findNode(root) { node ->
+            val token = nodeToken(node)
+            token.contains("comment") || token.contains("تعليق") || token.contains("kommentar")
+        }
+        if (!clickNode(commentButton)) {
+            commentFailure("لم أجد زر التعليق")
+            done()
+            return
+        }
+
+        recordAction("فتح التعليقات")
+        handler.postDelayed({ findEditorAndWrite(attempt = 0, done = done) }, 450)
+    }
+
+    private fun findEditorAndWrite(attempt: Int, done: () -> Unit) {
+        val root = currentTikTokRoot() ?: run {
+            commentFailure("اختفت نافذة TikTok أثناء فتح التعليقات")
+            done()
+            return
+        }
+        val editor = findNode(root) { node ->
+            node.isEditable || node.className?.toString()?.contains("EditText", ignoreCase = true) == true
+        }
+
+        if (editor == null) {
+            if (attempt < 4) {
+                handler.postDelayed({ findEditorAndWrite(attempt + 1, done) }, 220)
+            } else {
+                commentFailure("لم يظهر حقل كتابة التعليق")
                 safeBackIfTikTok()
                 done()
-                return@openEditor
             }
+            return
+        }
 
-            val text = comments[commentIndex % comments.size]
-            val args = Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-            }
-            if (!isTikTokActiveStrict()) {
+        val text = comments[commentIndex % comments.size]
+        val args = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+        }
+        if (!isTikTokActiveStrict()) {
+            commentFailure("TikTok لم يعد النافذة النشطة")
+            done()
+            return
+        }
+
+        editor.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        val wrote = editor.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        if (!wrote) {
+            commentFailure("تعذر إدخال نص التعليق")
+            safeBackIfTikTok()
+            done()
+            return
+        }
+
+        recordAction("تم إدخال التعليق")
+        handler.postDelayed({ findSendAndSubmit(attempt = 0, done = done) }, 250)
+    }
+
+    private fun findSendAndSubmit(attempt: Int, done: () -> Unit) {
+        val root = currentTikTokRoot() ?: run {
+            commentFailure("اختفت نافذة TikTok قبل الإرسال")
+            done()
+            return
+        }
+        val send = findNode(root) { node ->
+            if (!node.isEnabled) return@findNode false
+            val label = nodeLabel(node)
+            val token = nodeToken(node)
+            label == "send" || label == "post" || label == "إرسال" || label == "نشر" ||
+                label == "skicka" || token.contains("send_comment") || token.contains("post_comment") ||
+                token.contains("submit_comment")
+        }
+
+        if (send == null) {
+            if (attempt < 4) {
+                handler.postDelayed({ findSendAndSubmit(attempt + 1, done) }, 220)
+            } else {
+                commentFailure("لم أجد زر إرسال التعليق")
+                safeBackIfTikTok()
                 done()
-                return@openEditor
             }
-            editor.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-            editor.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+            return
+        }
 
-            handler.postDelayed(sendComment@{
-                val sendRoot = currentTikTokRoot() ?: run { done(); return@sendComment }
-                val send = findNode(sendRoot) { node ->
-                    val label = nodeLabel(node)
-                    label == "send" || label.contains("post") || label.contains("إرسال") ||
-                        label.contains("نشر") || label.contains("skicka")
-                }
-                if (clickNode(send)) {
-                    commentIndex++
-                    handler.postDelayed({
-                        safeBackIfTikTok()
-                        done()
-                    }, 350)
-                } else {
-                    safeBackIfTikTok()
-                    done()
-                }
-            }, 320)
-        }, 650)
+        if (clickNode(send)) {
+            commentIndex++
+            bumpStat("stat_comment_ok")
+            recordAction("تم إرسال تعليق")
+            updateOverlayAppearance()
+            handler.postDelayed({
+                safeBackIfTikTok()
+                done()
+            }, 350)
+        } else {
+            commentFailure("تعذر ضغط زر الإرسال")
+            safeBackIfTikTok()
+            done()
+        }
     }
 
     private fun currentTikTokRoot(): AccessibilityNodeInfo? {
@@ -216,7 +299,9 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         var current = node ?: return false
         repeat(6) {
             if (!isTikTokActiveStrict()) return false
-            if (current.isClickable && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+            if (current.isClickable && current.isEnabled && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                return true
+            }
             current = current.parent ?: return false
         }
         return false
@@ -239,6 +324,13 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             .trim()
     }
 
+    private fun nodeToken(node: AccessibilityNodeInfo): String {
+        return listOfNotNull(node.text, node.contentDescription, node.viewIdResourceName, node.className)
+            .joinToString(" ")
+            .lowercase()
+            .trim()
+    }
+
     private fun safeBackIfTikTok() {
         if (isTikTokActiveStrict()) performGlobalAction(GLOBAL_ACTION_BACK)
     }
@@ -250,13 +342,32 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         }
 
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
-        val density = resources.displayMetrics.density
+        val dm = resources.displayMetrics
+        val density = dm.density
         val size = (76 * density).roundToInt()
+        val margin = (12 * density).roundToInt()
+        val maxX = (dm.widthPixels - size).coerceAtLeast(0)
+        val maxY = (dm.heightPixels - size).coerceAtLeast(0)
+        val startX = localPrefs.getInt("overlay_x", maxX - margin).coerceIn(0, maxX)
+        val startY = localPrefs.getInt("overlay_y", (dm.heightPixels - size) / 2).coerceIn(0, maxY)
+
+        val lp = WindowManager.LayoutParams(
+            size,
+            size,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.START or Gravity.TOP
+            x = startX
+            y = startY
+        }
+
         val button = TextView(this).apply {
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            textSize = 19f
-            maxLines = 2
+            textSize = 18f
+            maxLines = 3
             isClickable = true
             importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
             setOnClickListener {
@@ -266,37 +377,77 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 if (next) {
                     edit.putBoolean("auto_comment", true)
                     edit.putInt("comment_every", 1)
+                    recordAction("AUTO يعمل")
+                } else {
+                    recordAction("AUTO متوقف")
                 }
                 edit.apply()
                 reloadFromPrefs()
             }
         }
-        val lp = WindowManager.LayoutParams(
-            size,
-            size,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-            PixelFormat.TRANSLUCENT,
-        ).apply {
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            x = (12 * density).roundToInt()
+
+        var downRawX = 0f
+        var downRawY = 0f
+        var downX = 0
+        var downY = 0
+        var dragged = false
+        val dragThreshold = 8 * density
+
+        button.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    downX = lp.x
+                    downY = lp.y
+                    dragged = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downRawX
+                    val dy = event.rawY - downRawY
+                    if (abs(dx) > dragThreshold || abs(dy) > dragThreshold) dragged = true
+                    if (dragged) {
+                        lp.x = (downX + dx.roundToInt()).coerceIn(0, maxX)
+                        lp.y = (downY + dy.roundToInt()).coerceIn(0, maxY)
+                        runCatching { wm.updateViewLayout(view, lp) }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (dragged) {
+                        localPrefs.edit()
+                            .putInt("overlay_x", lp.x)
+                            .putInt("overlay_y", lp.y)
+                            .apply()
+                    } else {
+                        view.performClick()
+                    }
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> true
+                else -> false
+            }
         }
 
         runCatching {
             wm.addView(button, lp)
             overlay = button
+            overlayParams = lp
             localPrefs.edit().remove("last_overlay_error").apply()
             updateOverlayAppearance()
         }.onFailure { error ->
             localPrefs.edit().putString("last_overlay_error", error.javaClass.simpleName + ": " + error.message.orEmpty()).apply()
             overlay = null
+            overlayParams = null
         }
     }
 
     private fun updateOverlayAppearance() {
         val view = overlay ?: return
         val active = prefs.getBoolean("enabled", false)
-        view.text = if (active) "🎡\nON" else "🎡\nOFF"
+        val commentsOk = localPrefs.getInt("stat_comment_ok", 0)
+        view.text = if (active) "🎡\nON · $commentsOk" else "🎡\nOFF"
         view.background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(if (active) Color.rgb(0, 125, 110) else Color.argb(232, 18, 18, 18))
@@ -311,5 +462,20 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         val view = overlay ?: return
         runCatching { (getSystemService(WINDOW_SERVICE) as WindowManager).removeView(view) }
         overlay = null
+        overlayParams = null
+    }
+
+    private fun bumpStat(key: String) {
+        localPrefs.edit().putInt(key, localPrefs.getInt(key, 0) + 1).apply()
+    }
+
+    private fun recordAction(message: String) {
+        localPrefs.edit().putString("last_auto_action", message).apply()
+    }
+
+    private fun commentFailure(reason: String) {
+        bumpStat("stat_comment_fail")
+        recordAction(reason)
+        updateOverlayAppearance()
     }
 }
