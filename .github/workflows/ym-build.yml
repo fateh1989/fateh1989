@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - ym-v0.23-continuous-auto
+      - ym-v0.24-overlay-fix
     paths:
       - 'ym-ci/android/**'
       - 'ym-ci/relay/**'
       - '.github/workflows/ym-build.yml'
 
 env:
-  YM_VERSION: "0.23.0-dev"
+  YM_VERSION: "0.24.0-dev"
 
 jobs:
   build:
@@ -30,16 +30,19 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Apply YM v0.23 source patch
+      - name: Apply YM v0.23 base behavior
         run: python3 ym-ci/android/tools/patch_v023_v2.py
+
+      - name: Apply YM v0.24 overlay/runtime fix
+        run: python3 ym-ci/android/tools/patch_v024.py
 
       - name: Validate YM relay JavaScript
         run: node --check ym-ci/relay/src/index.js
 
       - name: Verify development version metadata
         run: |
-          grep 'versionCode = 23' ym-ci/android/app/build.gradle.kts
-          grep 'versionName = "0.23.0-dev"' ym-ci/android/app/build.gradle.kts
+          grep 'versionCode = 24' ym-ci/android/app/build.gradle.kts
+          grep 'versionName = "0.24.0-dev"' ym-ci/android/app/build.gradle.kts
 
       - name: Unit tests
         run: gradle -p ym-ci/android testDebugUnitTest --stacktrace
@@ -50,6 +53,6 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: YM-v0.23-dev-apk
+          name: YM-v0.24-dev-apk
           path: ym-ci/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
