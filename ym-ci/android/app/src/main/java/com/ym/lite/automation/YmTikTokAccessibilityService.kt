@@ -435,6 +435,18 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             return
         }
 
+        // Never send BACK unless the TikTok comment UI is still visibly open.
+        // After a successful post TikTok may close the composer/sheet itself; in that
+        // state GLOBAL_ACTION_BACK would act on the feed and can exit TikTok.
+        if (!isCommentPanelVisible()) {
+            record(
+                if (success) "panel_already_closed" else "failure_panel_already_closed",
+                "لوحة التعليقات مغلقة بالفعل؛ لن يضغط YM زر الرجوع",
+            )
+            resetFlight()
+            return
+        }
+
         if (backCount >= 2) {
             record(
                 if (success) "panel_close_guard" else "failure_panel_close_guard",
