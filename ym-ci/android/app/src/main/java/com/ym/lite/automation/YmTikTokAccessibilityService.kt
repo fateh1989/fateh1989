@@ -106,7 +106,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
 
         val shouldComment = autoComment && comments.isNotEmpty() && ((scrollCount + 1) % commentEvery == 0)
         if (shouldComment) {
-            attemptComment {
+            findCommentButtonAndOpen(attempt = 0) {
                 if (prefs.getBoolean("enabled", false)) {
                     handler.postDelayed({ swipeAndContinue() }, 450)
                 }
@@ -134,7 +134,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
 
         val accepted = dispatchGesture(
             gesture,
-            object : AccessibilityService.GestureResultCallback() {
+            object : GestureResultCallback() {
                 override fun onCompleted(gestureDescription: GestureDescription?) {
                     completeScroll("تمرير ناجح")
                 }
@@ -158,11 +158,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         val root = currentTikTokRoot()
         val scrollable = root?.let { findNode(it) { node -> node.isScrollable && node.isEnabled } }
         val scrolled = scrollable?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) == true
-        if (scrolled) {
-            completeScroll("تمرير احتياطي ناجح")
-        } else {
-            failScroll(reason)
-        }
+        if (scrolled) completeScroll("تمرير احتياطي ناجح") else failScroll(reason)
     }
 
     private fun completeScroll(message: String) {
@@ -180,26 +176,28 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         if (prefs.getBoolean("enabled", false)) handler.postDelayed(loop, 700)
     }
 
-    private fun attemptComment(done: () -> Unit) {
+    private fun findCommentButtonAndOpen(attempt: Int, done: () -> Unit) {
         val root = currentTikTokRoot() ?: run {
             commentFailure("comment_root_missing", "نافذة TikTok غير متاحة")
             done()
             return
         }
 
-        recordStage("comment_search_button", "البحث عن زر التعليق")
-        val commentButton = findNode(root) { node ->
-            val token = nodeToken(node)
-            token.contains("comment") || token.contains("تعليق") || token.contains("kommentar")
-        }
-        if (!clickNode(commentButton)) {
-            commentFailure("comment_button_missing", "لم أجد زر التعليق")
-            done()
+        recordStage("comment_search_button", "البحث داخل عناصر TikTok عن زر التعليقات")
+        val button = findBestNode(root, ::commentButtonScore, minScore = 8)
+        if (clickNode(button)) {
+            recordStage("comment_opened", "فتح لوحة تعليقات TikTok")
+            handler.postDelayed({ findEditorAndWrite(attempt = 0, done = done) }, 420)
             return
         }
 
-        recordStage("comment_opened", "فتح التعليقات")
-        handler.postDelayed({ findEditorAndWrite(attempt = 0, done = done) }, 450)
+        if (attempt < 3) {
+            recordStage("comment_retry_button", "إعادة قراءة واجهة TikTok ${attempt + 1}/4")
+            handler.postDelayed({ findCommentButtonAndOpen(attempt + 1, done) }, 240)
+        } else {
+            commentFailure("comment_button_missing", "TikTok لم يعرض زر التعليقات كعنصر قابل للوصول | ${probeSummary(root)}")
+            done()
+        }
     }
 
     private fun findEditorAndWrite(attempt: Int, done: () -> Unit) {
@@ -208,16 +206,14 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             done()
             return
         }
-        val editor = findNode(root) { node ->
-            node.isEditable || node.className?.toString()?.contains("EditText", ignoreCase = true) == true
-        }
 
+        val editor = findBestNode(root, ::commentEditorScore, minScore = 20)
         if (editor == null) {
-            if (attempt < 5) {
-                recordStage("comment_wait_editor", "انتظار حقل التعليق ${attempt + 1}/6")
+            if (attempt < 7) {
+                recordStage("comment_wait_editor", "انتظار حقل تعليق TikTok ${attempt + 1}/8")
                 handler.postDelayed({ findEditorAndWrite(attempt + 1, done) }, 220)
             } else {
-                commentFailure("comment_editor_missing", "لم يظهر حقل كتابة التعليق")
+                commentFailure("comment_editor_missing", "لم يظهر حقل كتابة TikTok | ${probeSummary(root)}")
                 safeBackIfTikTok()
                 done()
             }
@@ -237,37 +233,30 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         editor.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val wrote = editor.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
         if (!wrote) {
-            commentFailure("comment_write_failed", "تعذر إدخال نص التعليق")
+            commentFailure("comment_write_failed", "TikTok رفض ACTION_SET_TEXT على حقل التعليق | ${nodeSignature(editor)}")
             safeBackIfTikTok()
             done()
             return
         }
 
-        recordStage("comment_text_written", "تم إدخال التعليق")
-        handler.postDelayed({ findSendAndSubmit(attempt = 0, done = done) }, 250)
+        recordStage("comment_text_written", "تم إدخال التعليق في حقل TikTok")
+        handler.postDelayed({ findSendAndSubmit(editor, attempt = 0, done = done) }, 250)
     }
 
-    private fun findSendAndSubmit(attempt: Int, done: () -> Unit) {
+    private fun findSendAndSubmit(editor: AccessibilityNodeInfo, attempt: Int, done: () -> Unit) {
         val root = currentTikTokRoot() ?: run {
             commentFailure("comment_root_before_send", "اختفت نافذة TikTok قبل الإرسال")
             done()
             return
         }
-        val send = findNode(root) { node ->
-            if (!node.isEnabled) return@findNode false
-            val label = nodeLabel(node)
-            val token = nodeToken(node)
-            label == "send" || label == "post" || label == "إرسال" || label == "نشر" ||
-                label == "skicka" || token.contains("send_comment") || token.contains("post_comment") ||
-                token.contains("submit_comment")
-        }
 
+        val send = findSendNearEditor(editor) ?: findBestNode(root, ::commentSendScore, minScore = 8)
         if (send == null) {
-            if (attempt < 5) {
-                recordStage("comment_wait_send", "انتظار زر الإرسال ${attempt + 1}/6")
-                handler.postDelayed({ findSendAndSubmit(attempt + 1, done) }, 220)
+            if (attempt < 7) {
+                recordStage("comment_wait_send", "انتظار زر نشر TikTok ${attempt + 1}/8")
+                handler.postDelayed({ findSendAndSubmit(editor, attempt + 1, done) }, 220)
             } else {
-                commentFailure("comment_send_missing", "لم أجد زر إرسال التعليق")
+                commentFailure("comment_send_missing", "لم يظهر زر نشر التعليق في TikTok | ${probeSummary(root)}")
                 safeBackIfTikTok()
                 done()
             }
@@ -275,14 +264,14 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         }
 
         if (!clickNode(send)) {
-            commentFailure("comment_send_click_failed", "تعذر ضغط زر الإرسال")
+            commentFailure("comment_send_click_failed", "تعذر ضغط زر نشر TikTok | ${nodeSignature(send)}")
             safeBackIfTikTok()
             done()
             return
         }
 
-        recordStage("comment_send_clicked", "تم ضغط زر الإرسال")
-        handler.postDelayed({ verifyCommentSubmitted(attempt = 0, done = done) }, 260)
+        recordStage("comment_send_clicked", "تم ضغط زر نشر TikTok")
+        handler.postDelayed({ verifyCommentSubmitted(attempt = 0, done = done) }, 280)
     }
 
     private fun verifyCommentSubmitted(attempt: Int, done: () -> Unit) {
@@ -292,26 +281,23 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         }
 
         val root = currentTikTokRoot()
-        val editor = root?.let { findNode(it) { node ->
-            node.isEditable || node.className?.toString()?.contains("EditText", ignoreCase = true) == true
-        } }
-
+        val editor = root?.let { findBestNode(it, ::commentEditorScore, minScore = 20) }
         if (editor == null) {
             finishCommentSuccess(closePanel = false, done = done)
             return
         }
 
         val currentText = editor.text?.toString().orEmpty().trim()
-        if (currentText.isBlank()) {
+        if (currentText.isBlank() || currentText != pendingCommentText) {
             finishCommentSuccess(closePanel = true, done = done)
             return
         }
 
-        if (attempt < 5) {
-            recordStage("comment_verify_send", "التحقق من الإرسال ${attempt + 1}/6")
+        if (attempt < 6) {
+            recordStage("comment_verify_send", "التحقق من نشر التعليق ${attempt + 1}/7")
             handler.postDelayed({ verifyCommentSubmitted(attempt + 1, done) }, 230)
         } else {
-            commentFailure("comment_send_unconfirmed", "ضغطت الإرسال لكن لم أتحقق من نجاحه")
+            commentFailure("comment_send_unconfirmed", "ضغطت زر النشر لكن TikTok أبقى النص في الحقل")
             safeBackIfTikTok()
             done()
         }
@@ -320,13 +306,130 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private fun finishCommentSuccess(closePanel: Boolean, done: () -> Unit) {
         commentIndex++
         bumpStat("stat_comment_ok")
-        recordStage("comment_ok", "تم إرسال تعليق وتأكيده")
+        recordStage("comment_ok", "تم إرسال تعليق عبر عناصر TikTok وتأكيده")
         pendingCommentText = ""
         updateOverlayAppearance()
         handler.postDelayed({
             if (closePanel) safeBackIfTikTok()
             done()
         }, 300)
+    }
+
+    private fun commentButtonScore(node: AccessibilityNodeInfo): Int {
+        if (!node.isEnabled || node.isEditable) return 0
+        val token = nodeToken(node)
+        if (token.isBlank()) return 0
+        var score = 0
+
+        if (token.contains("read or add comments")) score += 40
+        if (token.contains("view comments") || token.contains("open comments")) score += 32
+        if (containsAny(token, "comments", "comment", "kommentarer", "kommentar", "تعليقات", "التعليقات", "تعليق")) score += 12
+        if (node.viewIdResourceName?.contains("comment", ignoreCase = true) == true) score += 16
+        if (node.contentDescription?.toString()?.contains("comment", ignoreCase = true) == true) score += 12
+        if (node.isClickable) score += 5
+        if (isButtonLike(node)) score += 3
+
+        if (token.contains("add comment") || token.contains("write a comment")) score -= 20
+        return score
+    }
+
+    private fun commentEditorScore(node: AccessibilityNodeInfo): Int {
+        if (!node.isEnabled) return 0
+        val token = nodeToken(node)
+        var score = 0
+        if (node.isEditable) score += 30
+        if (node.className?.toString()?.contains("EditText", ignoreCase = true) == true) score += 20
+        if (supportsAction(node, AccessibilityNodeInfo.ACTION_SET_TEXT)) score += 14
+        if (containsAny(token, "add comment", "write a comment", "comment here", "kommentera", "skriv en kommentar", "أضف تعليق", "اكتب تعليق")) score += 18
+        if (node.isFocusable) score += 2
+        return score
+    }
+
+    private fun commentSendScore(node: AccessibilityNodeInfo): Int {
+        if (!node.isEnabled || node.isEditable) return 0
+        val token = nodeToken(node)
+        val label = nodeLabel(node)
+        var score = 0
+
+        if (containsAny(token, "send_comment", "post_comment", "submit_comment", "comment_send", "comment_post")) score += 40
+        if (label in setOf("send", "post", "publish", "skicka", "publicera", "إرسال", "نشر")) score += 28
+        if (containsAny(token, "send comment", "post comment", "publish comment", "send", "post", "skicka", "publicera", "إرسال", "نشر")) score += 10
+        if (node.viewIdResourceName?.let { containsAny(it.lowercase(), "send", "post", "submit") } == true) score += 14
+        if (node.isClickable) score += 5
+        if (isButtonLike(node)) score += 3
+        return score
+    }
+
+    private fun findSendNearEditor(editor: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        var anchor: AccessibilityNodeInfo? = editor.parent
+        repeat(5) {
+            val current = anchor ?: return@repeat
+            val candidate = findBestNode(current, ::commentSendScore, minScore = 8)
+            if (candidate != null && candidate !== editor) return candidate
+            anchor = current.parent
+        }
+        return null
+    }
+
+    private fun findBestNode(
+        root: AccessibilityNodeInfo,
+        scorer: (AccessibilityNodeInfo) -> Int,
+        minScore: Int,
+    ): AccessibilityNodeInfo? {
+        var best: AccessibilityNodeInfo? = null
+        var bestScore = minScore - 1
+        walkNodes(root, limit = 600) { node ->
+            val score = scorer(node)
+            if (score > bestScore) {
+                best = node
+                bestScore = score
+            }
+        }
+        return best
+    }
+
+    private fun walkNodes(root: AccessibilityNodeInfo, limit: Int, block: (AccessibilityNodeInfo) -> Unit) {
+        var visited = 0
+        fun visit(node: AccessibilityNodeInfo) {
+            if (visited >= limit) return
+            visited++
+            block(node)
+            for (i in 0 until node.childCount) {
+                if (visited >= limit) return
+                node.getChild(i)?.let(::visit)
+            }
+        }
+        visit(root)
+    }
+
+    private fun supportsAction(node: AccessibilityNodeInfo, actionId: Int): Boolean {
+        return node.actionList.any { it.id == actionId }
+    }
+
+    private fun isButtonLike(node: AccessibilityNodeInfo): Boolean {
+        val name = node.className?.toString().orEmpty().lowercase()
+        return name.contains("button") || name.contains("image")
+    }
+
+    private fun containsAny(text: String, vararg values: String): Boolean {
+        return values.any { text.contains(it, ignoreCase = true) }
+    }
+
+    private fun probeSummary(root: AccessibilityNodeInfo): String {
+        val hits = mutableListOf<String>()
+        walkNodes(root, limit = 250) { node ->
+            if (hits.size >= 6) return@walkNodes
+            val token = nodeToken(node)
+            if (containsAny(token, "comment", "kommentar", "تعليق", "send", "post", "skicka", "نشر", "إرسال") || node.isEditable) {
+                hits += nodeSignature(node)
+            }
+        }
+        return if (hits.isEmpty()) "لا توجد عقد تعليق ظاهرة" else hits.joinToString(" || ")
+    }
+
+    private fun nodeSignature(node: AccessibilityNodeInfo): String {
+        val text = nodeToken(node).replace('\n', ' ').take(90)
+        return "${node.className?.toString()?.substringAfterLast('.').orEmpty()}:$text"
     }
 
     private fun currentTikTokRoot(): AccessibilityNodeInfo? {
@@ -348,8 +451,11 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private fun clickNode(node: AccessibilityNodeInfo?): Boolean {
         if (!isTikTokActiveStrict()) return false
         var current = node ?: return false
-        repeat(6) {
+        repeat(7) {
             if (!isTikTokActiveStrict()) return false
+            if (current.isEnabled && supportsAction(current, AccessibilityNodeInfo.ACTION_CLICK) && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                return true
+            }
             if (current.isClickable && current.isEnabled && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                 return true
             }
@@ -369,15 +475,22 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     }
 
     private fun nodeLabel(node: AccessibilityNodeInfo): String {
-        return listOfNotNull(node.text, node.contentDescription)
+        return listOfNotNull(node.text, node.contentDescription, node.hintText)
             .joinToString(" ")
             .lowercase()
             .trim()
     }
 
     private fun nodeToken(node: AccessibilityNodeInfo): String {
-        return listOfNotNull(node.text, node.contentDescription, node.viewIdResourceName, node.className)
-            .joinToString(" ")
+        val actions = node.actionList.mapNotNull { it.label?.toString() }.joinToString(" ")
+        return listOfNotNull(
+            node.text,
+            node.contentDescription,
+            node.hintText,
+            node.viewIdResourceName,
+            node.className,
+            actions,
+        ).joinToString(" ")
             .lowercase()
             .trim()
     }
