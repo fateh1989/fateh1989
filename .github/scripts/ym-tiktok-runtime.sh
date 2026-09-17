@@ -50,7 +50,11 @@ cat > runtime/ym_auto_comment.xml <<'XML'
 </map>
 XML
 adb push runtime/ym_auto_comment.xml /data/local/tmp/ym_auto_comment.xml
-adb shell 'run-as com.ym.lite.stable mkdir -p shared_prefs && cp /data/local/tmp/ym_auto_comment.xml shared_prefs/ym_auto_comment.xml'
+# Keep both operations inside run-as. The previous single shell line only ran mkdir as the app UID;
+# cp ran as the outer shell and therefore could not resolve the app-private shared_prefs directory.
+adb shell run-as com.ym.lite.stable mkdir -p shared_prefs
+adb shell run-as com.ym.lite.stable cp /data/local/tmp/ym_auto_comment.xml shared_prefs/ym_auto_comment.xml
+adb shell run-as com.ym.lite.stable cat shared_prefs/ym_auto_comment.xml > runtime/evidence/ym-auto-comment-seeded.xml
 
 adb shell appops set com.ym.lite.stable SYSTEM_ALERT_WINDOW allow || true
 adb shell settings put secure enabled_accessibility_services com.ym.lite.stable/com.ym.lite.automation.YmTikTokAccessibilityService
