@@ -1,10 +1,10 @@
 package com.ym.lite
 
-import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.view.Gravity
@@ -15,8 +15,9 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.ym.lite.automation.TikTokScope
-import com.ym.lite.automation.YmTikTokAccessibilityService
+import com.ym.lite.overlay.YmOverlayService
 
 class TikTokAutoActivity : AppCompatActivity() {
     private lateinit var status: TextView
@@ -57,7 +58,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         })
 
         body.addView(TextView(this).apply {
-            text = "المرحلة 1: ثلاثة أزرار عائمة فقط فوق TikTok الرئيسي.\nلا تعليق تلقائي ولا وظائف إضافية في هذه النسخة."
+            text = "المرحلة 1: ثلاثة أزرار عائمة فقط فوق TikTok الرئيسي.\nلا نستخدم إمكانية الوصول في هذه النسخة."
             setTextColor(Color.LTGRAY)
             textSize = 17f
             gravity = Gravity.CENTER
@@ -73,19 +74,34 @@ class TikTokAutoActivity : AppCompatActivity() {
         }
         body.addView(status, matchWrap().apply { bottomMargin = dp(18) })
 
-        body.addView(actionButton("1 — تفعيل YM من إمكانية الوصول") {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        body.addView(actionButton("1 — السماح لـ YM بالظهور فوق التطبيقات") {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName"),
+            )
+            startActivity(intent)
         }, matchWrap())
 
-        body.addView(actionButton("2 — فتح TikTok الرئيسي") {
-            if (!isAccessibilityEnabled()) {
-                Toast.makeText(this, "فعّل YM Automation أولًا كي تظهر الأزرار", Toast.LENGTH_LONG).show()
+        body.addView(actionButton("2 — تشغيل الأزرار وفتح TikTok الرئيسي") {
+            if (!Settings.canDrawOverlays(this)) {
+                Toast.makeText(this, "اسمح أولًا لـ YM بالظهور فوق التطبيقات", Toast.LENGTH_LONG).show()
+                return@actionButton
             }
+            ContextCompat.startForegroundService(
+                this,
+                Intent(this, YmOverlayService::class.java),
+            )
             launchMainTikTok()
         }, matchWrap())
 
+        body.addView(actionButton("إيقاف الأزرار العائمة") {
+            startService(
+                Intent(this, YmOverlayService::class.java).setAction(YmOverlayService.ACTION_STOP),
+            )
+        }, matchWrap())
+
         body.addView(TextView(this).apply {
-            text = "عند فتح TikTok الرئيسي يجب أن يظهر على اليسار عمود: YM ثم 💬 ثم ⚙. يمكنك سحب العمود لمكانه فوق زر «تمرير تلقائي» الأصلي."
+            text = "بعد الخطوة 2 يظهر على اليسار عمود: YM ثم 💬 ثم ⚙. اسحب زر YM لتحريك العمود فوق زر «تمرير تلقائي» الأصلي. الأزرار بلا وظائف في هذه المرحلة."
             setTextColor(Color.LTGRAY)
             textSize = 15f
             gravity = Gravity.CENTER
@@ -97,22 +113,13 @@ class TikTokAutoActivity : AppCompatActivity() {
 
     private fun render() {
         if (!::status.isInitialized) return
-        val access = isAccessibilityEnabled()
-        status.text = if (access) {
-            "✓ YM Automation مفعّل\nافتح TikTok الرئيسي لرؤية الأزرار الثلاثة"
+        val overlayAllowed = Settings.canDrawOverlays(this)
+        status.text = if (overlayAllowed) {
+            "✓ إذن الظهور فوق التطبيقات مفعّل\nاضغط الخطوة 2"
         } else {
-            "YM Automation غير مفعّل\nاضغط الخطوة 1 ثم فعّله"
+            "YM يحتاج إذن الظهور فوق التطبيقات فقط\nلا يحتاج Accessibility ولا قائمة الثلاث نقاط"
         }
-        status.setTextColor(if (access) Color.rgb(37, 244, 238) else Color.WHITE)
-    }
-
-    private fun isAccessibilityEnabled(): Boolean {
-        val component = ComponentName(this, YmTikTokAccessibilityService::class.java).flattenToString()
-        val enabled = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-        ).orEmpty()
-        return enabled.split(':').any { it.equals(component, ignoreCase = true) }
+        status.setTextColor(if (overlayAllowed) Color.rgb(37, 244, 238) else Color.WHITE)
     }
 
     private fun launchMainTikTok() {
