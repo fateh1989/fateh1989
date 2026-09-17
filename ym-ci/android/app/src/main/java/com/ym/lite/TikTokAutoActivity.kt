@@ -66,7 +66,7 @@ class TikTokAutoActivity : AppCompatActivity() {
             setTypeface(typeface, Typeface.BOLD)
         })
         body.addView(TextView(this).apply {
-            text = "الدولاب العائم يظهر داخل TikTok فقط. ضغطة واحدة تشغّل أو توقف التعليق والتمرير معًا."
+            text = "الدولاب العائم يظهر داخل TikTok فقط. اضغطه للتشغيل/الإيقاف واسحبه لأي مكان يناسبك."
             setTextColor(Color.LTGRAY)
             textSize = 14f
             gravity = Gravity.CENTER
@@ -124,9 +124,23 @@ class TikTokAutoActivity : AppCompatActivity() {
 
         body.addView(actionButton("إيقاف TikTok AUTO") {
             prefs.edit().putBoolean("enabled", false).putBoolean("pending_launch", false).apply()
+            localPrefs.edit().putString("last_auto_action", "AUTO متوقف").apply()
             YmTikTokAccessibilityService.notifyConfigChanged()
             render()
             Toast.makeText(this, "تم إيقاف TikTok AUTO", Toast.LENGTH_SHORT).show()
+        }, matchWrap())
+
+        body.addView(actionButton("تصفير عدادات AUTO") {
+            localPrefs.edit()
+                .remove("stat_scroll_ok")
+                .remove("stat_scroll_fail")
+                .remove("stat_comment_ok")
+                .remove("stat_comment_fail")
+                .remove("last_auto_action")
+                .apply()
+            render()
+            YmTikTokAccessibilityService.notifyConfigChanged()
+            Toast.makeText(this, "تم تصفير العدادات", Toast.LENGTH_SHORT).show()
         }, matchWrap())
 
         body.addView(actionButton("فتح إعدادات إمكانية الوصول") {
@@ -173,13 +187,27 @@ class TikTokAutoActivity : AppCompatActivity() {
         val count = localPrefs.getString("comment_pool", "").orEmpty()
             .lineSequence().count { it.isNotBlank() }
             .takeIf { it > 0 } ?: YmCommentDefaults.all.size
+        val scrollOk = localPrefs.getInt("stat_scroll_ok", 0)
+        val scrollFail = localPrefs.getInt("stat_scroll_fail", 0)
+        val commentOk = localPrefs.getInt("stat_comment_ok", 0)
+        val commentFail = localPrefs.getInt("stat_comment_fail", 0)
+        val lastAction = localPrefs.getString("last_auto_action", "").orEmpty()
         val overlayError = localPrefs.getString("last_overlay_error", "").orEmpty()
+
         status.text = buildString {
             append(if (running) "● TikTok AUTO يعمل" else "○ TikTok AUTO متوقف")
             append("\nإمكانية الوصول: ")
             append(if (access) "مفعّلة" else "غير مفعّلة")
             append("\nالتعليقات: ")
             append(if (commentState) "مفعّلة ($count)" else "متوقفة")
+            append("\nتمرير ناجح: $scrollOk")
+            append(" | فشل: $scrollFail")
+            append("\nتعليق ناجح: $commentOk")
+            append(" | فشل: $commentFail")
+            if (lastAction.isNotBlank()) {
+                append("\nآخر حدث: ")
+                append(lastAction)
+            }
             if (overlayError.isNotBlank()) {
                 append("\nخطأ الزر العائم: ")
                 append(overlayError)
