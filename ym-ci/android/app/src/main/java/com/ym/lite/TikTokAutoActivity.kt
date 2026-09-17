@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.NumberPicker
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
@@ -28,8 +29,8 @@ class TikTokAutoActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var sessionDuration: EditText
     private lateinit var smartWatch: Switch
-    private lateinit var smartFallback: EditText
-    private lateinit var interval: EditText
+    private lateinit var smartFallback: NumberPicker
+    private lateinit var interval: NumberPicker
     private lateinit var autoComment: Switch
     private lateinit var commentEvery: EditText
     private lateinit var maxCommentsSession: EditText
@@ -38,6 +39,7 @@ class TikTokAutoActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        migrateShortTimingDefaults()
         setContentView(buildScreen())
         loadSettings()
         render()
@@ -51,6 +53,15 @@ class TikTokAutoActivity : AppCompatActivity() {
             YmTikTokAccessibilityService.notifyConfigChanged()
             launchTikTok()
         }
+    }
+
+    private fun migrateShortTimingDefaults() {
+        if (prefs.getBoolean("short_timing_wheels_v1", false)) return
+        prefs.edit()
+            .putInt("smart_fallback_sec", 4)
+            .putInt("interval_sec", 4)
+            .putBoolean("short_timing_wheels_v1", true)
+            .apply()
     }
 
     private fun buildScreen(): ScrollView {
@@ -71,7 +82,7 @@ class TikTokAutoActivity : AppCompatActivity() {
         })
 
         body.addView(TextView(this).apply {
-            text = "YM ينتظر نهاية الفيديو، يقلب تلقائيًا، ويستخدم دولاب الدعم داخل TikTok فقط."
+            text = "مرور سريع داخل TikTok: ثوانٍ قليلة لكل فيديو، ثم انتقال تلقائي وتعليقات من دولاب الدعم."
             setTextColor(Color.LTGRAY)
             textSize = 14f
             gravity = Gravity.CENTER
@@ -88,20 +99,20 @@ class TikTokAutoActivity : AppCompatActivity() {
         body.addView(durationRow(60, 120), matchWrap())
 
         smartWatch = Switch(this).apply {
-            text = "Smart Watch — انتظر نهاية الفيديو قبل الانتقال"
+            text = "Smart Watch — انتقل عند نهاية الفيديو أو عند انتهاء مهلة الثواني"
             setTextColor(Color.WHITE)
             textSize = 16f
             setPadding(0, dp(14), 0, dp(8))
         }
         body.addView(smartWatch, matchWrap())
 
-        body.addView(label("مهلة احتياطية إذا لم يستطع YM قراءة تقدم الفيديو — من 15 إلى 600 ثانية"))
-        smartFallback = numberField("90")
-        body.addView(smartFallback, matchWrap())
+        body.addView(label("مهلة الانتقال القصيرة — دولاب بالثواني (3 إلى 30)"))
+        smartFallback = secondsWheel(4)
+        body.addView(smartFallback, centeredPickerParams())
 
-        body.addView(label("زمن ثابت عند إيقاف Smart Watch — من 3 إلى 120 ثانية"))
-        interval = numberField("8")
-        body.addView(interval, matchWrap())
+        body.addView(label("الزمن الثابت عند إيقاف Smart Watch — دولاب بالثواني (3 إلى 30)"))
+        interval = secondsWheel(4)
+        body.addView(interval, centeredPickerParams())
 
         autoComment = Switch(this).apply {
             text = "تعليقات دعم تلقائية"
@@ -195,6 +206,22 @@ class TikTokAutoActivity : AppCompatActivity() {
         setOnClickListener { sessionDuration.setText(minutes.toString()) }
     }
 
+    private fun secondsWheel(defaultValue: Int) = NumberPicker(this).apply {
+        minValue = 3
+        maxValue = 30
+        value = defaultValue.coerceIn(minValue, maxValue)
+        wrapSelectorWheel = true
+        descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        setFormatter { seconds -> "$seconds ث" }
+    }
+
+    private fun centeredPickerParams() = LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        dp(118),
+    ).apply {
+        bottomMargin = dp(10)
+    }
+
     private fun templateRow(first: String, second: String): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         weightSum = 2f
@@ -221,8 +248,8 @@ class TikTokAutoActivity : AppCompatActivity() {
     private fun loadSettings() {
         sessionDuration.setText(prefs.getInt("session_duration_min", 60).toString())
         smartWatch.isChecked = prefs.getBoolean("smart_watch", true)
-        smartFallback.setText(prefs.getInt("smart_fallback_sec", 90).toString())
-        interval.setText(prefs.getInt("interval_sec", 8).toString())
+        smartFallback.value = prefs.getInt("smart_fallback_sec", 4).coerceIn(3, 30)
+        interval.value = prefs.getInt("interval_sec", 4).coerceIn(3, 30)
         autoComment.isChecked = prefs.getBoolean("auto_comment", false)
         commentEvery.setText(prefs.getInt("comment_every", 3).toString())
         maxCommentsSession.setText(prefs.getInt("max_comments_session", 5).toString())
@@ -232,15 +259,13 @@ class TikTokAutoActivity : AppCompatActivity() {
 
     private fun saveSettings(masterEnabled: Boolean) {
         val durationMinutes = sessionDuration.text.toString().toIntOrNull()?.coerceIn(1, 1440) ?: 60
-        val fallbackSeconds = smartFallback.text.toString().toIntOrNull()?.coerceIn(15, 600) ?: 90
-        val seconds = interval.text.toString().toIntOrNull()?.coerceIn(3, 120) ?: 8
+        val fallbackSeconds = smartFallback.value.coerceIn(3, 30)
+        val seconds = interval.value.coerceIn(3, 30)
         val every = commentEvery.text.toString().toIntOrNull()?.coerceIn(1, 100) ?: 3
         val maxComments = maxCommentsSession.text.toString().toIntOrNull()?.coerceIn(1, 50) ?: 5
         val gapSeconds = commentGapSeconds.text.toString().toIntOrNull()?.coerceIn(30, 3600) ?: 60
 
         sessionDuration.setText(durationMinutes.toString())
-        smartFallback.setText(fallbackSeconds.toString())
-        interval.setText(seconds.toString())
         commentEvery.setText(every.toString())
         maxCommentsSession.setText(maxComments.toString())
         commentGapSeconds.setText(gapSeconds.toString())
@@ -272,13 +297,14 @@ class TikTokAutoActivity : AppCompatActivity() {
         val maxComments = prefs.getInt("max_comments_session", 5)
         val gap = prefs.getInt("comment_gap_sec", 60)
         val duration = prefs.getInt("session_duration_min", 60)
-        val fallback = prefs.getInt("smart_fallback_sec", 90)
+        val fallback = prefs.getInt("smart_fallback_sec", 4).coerceIn(3, 30)
+        val fixed = prefs.getInt("interval_sec", 4).coerceIn(3, 30)
 
         status.text = buildString {
             append(if (running) "● AUTOPILOT يعمل" else "○ AUTOPILOT متوقف")
             append("\nمدة الجلسة: ${formatMinutes(duration)}")
             append("\nالمشاهدة: ")
-            append(if (smart) "Smart Watch — نهاية الفيديو (احتياط ${fallback}ث)" else "زمن ثابت")
+            append(if (smart) "Smart Watch — حد أقصى ${fallback}ث" else "زمن ثابت ${fixed}ث")
             append("\nإمكانية الوصول: ")
             append(if (access) "مفعّلة" else "غير مفعّلة")
             append("\nدولاب الدعم: ")
