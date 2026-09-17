@@ -11,7 +11,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.Gravity
-import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -44,7 +43,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
 
     private val scopeWatch = object : Runnable {
         override fun run() {
-            if (isTikTokForeground()) ensureOverlay() else removeOverlay()
+            if (shouldShowOverlay()) ensureOverlay() else removeOverlay()
             handler.postDelayed(this, 300)
         }
     }
@@ -61,7 +60,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         if (TikTokScope.isAllowed(event?.packageName)) {
             lastTikTokSeenAt = SystemClock.uptimeMillis()
             ensureOverlay()
-        } else if (!isTikTokForeground()) {
+        } else if (!shouldShowOverlay()) {
             removeOverlay()
         }
     }
@@ -97,8 +96,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         autoComment = prefs.getBoolean("auto_comment", true)
         if (!enabled) return
 
-        if (!isTikTokForeground()) {
-            removeOverlay()
+        if (!isTikTokActiveStrict()) {
             handler.postDelayed(loop, 500)
             return
         }
@@ -115,8 +113,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
 
     private fun swipeAndContinue() {
         if (!prefs.getBoolean("enabled", false)) return
-        if (!isTikTokForeground()) {
-            removeOverlay()
+        if (!isTikTokActiveStrict()) {
             handler.postDelayed(loop, 500)
             return
         }
@@ -133,7 +130,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             .addStroke(GestureDescription.StrokeDescription(path, 0, 190))
             .build()
 
-        if (!isTikTokForeground()) {
+        if (!isTikTokActiveStrict()) {
             handler.postDelayed(loop, 500)
             return
         }
@@ -170,7 +167,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             val args = Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
             }
-            if (currentTikTokRoot() == null) {
+            if (!isTikTokActiveStrict()) {
                 done()
                 return@openEditor
             }
@@ -203,20 +200,22 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         return root.takeIf { TikTokScope.isAllowed(it.packageName) }
     }
 
-    private fun isTikTokForeground(): Boolean {
-        val root = rootInActiveWindow
-        if (root != null && TikTokScope.isAllowed(root.packageName)) {
-            lastTikTokSeenAt = SystemClock.uptimeMillis()
-            return true
-        }
-        return SystemClock.uptimeMillis() - lastTikTokSeenAt < 1_500L
+    private fun isTikTokActiveStrict(): Boolean {
+        val active = currentTikTokRoot() != null
+        if (active) lastTikTokSeenAt = SystemClock.uptimeMillis()
+        return active
+    }
+
+    private fun shouldShowOverlay(): Boolean {
+        if (isTikTokActiveStrict()) return true
+        return SystemClock.uptimeMillis() - lastTikTokSeenAt < 800L
     }
 
     private fun clickNode(node: AccessibilityNodeInfo?): Boolean {
-        if (!isTikTokForeground()) return false
+        if (!isTikTokActiveStrict()) return false
         var current = node ?: return false
         repeat(6) {
-            if (!isTikTokForeground()) return false
+            if (!isTikTokActiveStrict()) return false
             if (current.isClickable && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
             current = current.parent ?: return false
         }
@@ -241,7 +240,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     }
 
     private fun safeBackIfTikTok() {
-        if (isTikTokForeground()) performGlobalAction(GLOBAL_ACTION_BACK)
+        if (isTikTokActiveStrict()) performGlobalAction(GLOBAL_ACTION_BACK)
     }
 
     private fun ensureOverlay() {
@@ -261,7 +260,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             isClickable = true
             importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
             setOnClickListener {
-                if (!isTikTokForeground()) return@setOnClickListener
+                if (!isTikTokActiveStrict()) return@setOnClickListener
                 val next = !prefs.getBoolean("enabled", false)
                 val edit = prefs.edit().putBoolean("enabled", next)
                 if (next) {
