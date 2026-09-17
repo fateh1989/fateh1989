@@ -121,7 +121,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
 
         handler.removeCallbacks(loop)
         updateOverlayText()
-        if (enabled && ensureSessionActive()) handler.postDelayed(loop, 800)
+        if (enabled && ensureSessionActive()) handler.postDelayed(loop, 250)
     }
 
     private fun tick() {
@@ -168,7 +168,6 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             }
         }
 
-        // Only use the fallback when TikTok exposes no readable playback progress.
         if (!videoProgressSeen && now - videoStartedAt >= smartFallbackMs) {
             advanceCurrentVideo()
             return
@@ -198,8 +197,30 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         }
         if (System.currentTimeMillis() < sessionEndAt) return true
 
+        stopAutopilot(showToast = true)
+        return false
+    }
+
+    private fun toggleAutopilotFromOverlay() {
+        if (currentTikTokRoot() == null) return
+
+        if (prefs.getBoolean("enabled", false)) {
+            stopAutopilot(showToast = true)
+        } else {
+            prefs.edit()
+                .putBoolean("enabled", true)
+                .putBoolean("pending_launch", false)
+                .putLong("session_end_at", 0L)
+                .apply()
+            reloadFromPrefs()
+            Toast.makeText(this, "بدأ YM AUTOPILOT", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun stopAutopilot(showToast: Boolean) {
         enabled = false
         gestureInFlight = false
+        sessionEndAt = 0L
         clearVideoTracking()
         prefs.edit()
             .putBoolean("enabled", false)
@@ -208,8 +229,9 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             .apply()
         handler.removeCallbacks(loop)
         updateOverlayText()
-        Toast.makeText(this, "انتهت مدة AUTOPILOT وتم إيقاف الجلسة", Toast.LENGTH_LONG).show()
-        return false
+        if (showToast) {
+            Toast.makeText(this, "تم إيقاف YM AUTOPILOT", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun swipeAndContinue() {
@@ -408,10 +430,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 setStroke((2 * density).roundToInt(), Color.rgb(37, 244, 238))
             }
             setOnClickListener {
-                if (currentTikTokRoot() == null) return@setOnClickListener
-                val next = !prefs.getBoolean("enabled", false)
-                prefs.edit().putBoolean("enabled", next).apply()
-                reloadFromPrefs()
+                toggleAutopilotFromOverlay()
             }
             setOnLongClickListener {
                 if (currentTikTokRoot() == null) return@setOnLongClickListener false
@@ -440,10 +459,10 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         overlay?.text = if (prefs.getBoolean("enabled", false) && sessionEndAt > 0L) {
             val remainingMs = (sessionEndAt - System.currentTimeMillis()).coerceAtLeast(0L)
             val remainingMinutes = (remainingMs + 59_999L) / 60_000L
-            val watchMark = if (prefs.getBoolean("smart_watch", true)) "▶" else "⏱"
-            "YM $watchMark\n● ${remainingMinutes}m\n↕ $scrollCount  💬 $commentsSent"
+            val watchMark = if (prefs.getBoolean("smart_watch", true)) "SMART" else "TIMER"
+            "■ STOP\n$watchMark · ${remainingMinutes}m\n↕ $scrollCount  💬 $commentsSent"
         } else {
-            "YM\n○"
+            "▶ AUTO\nYM"
         }
     }
 
