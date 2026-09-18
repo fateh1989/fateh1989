@@ -22,6 +22,7 @@ import androidx.core.app.NotificationCompat
 import com.ym.lite.TikTokAutoActivity
 import com.ym.lite.automation.YmTikTokAccessibilityService
 import com.ym.lite.comment.CommentWheelActivity
+import com.ym.lite.comment.GenericWheelActivity
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -127,6 +128,13 @@ class YmOverlayService : Service() {
             )
         }
 
+        ym.setOnClickListener {
+            openGenericWheel(1)
+        }
+        comment.setOnClickListener {
+            openGenericWheel(2)
+        }
+
         fourth.setOnClickListener {
             if (!isAutoCommentEngineEnabled()) {
                 openCommentWheel()
@@ -217,6 +225,14 @@ class YmOverlayService : Service() {
         val component = ComponentName(this, YmTikTokAccessibilityService::class.java).flattenToString()
         val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
         return enabled.split(':').any { it.equals(component, ignoreCase = true) }
+    }
+
+    private fun openGenericWheel(id: Int) {
+        startActivity(
+            Intent(this, GenericWheelActivity::class.java)
+                .putExtra(GenericWheelActivity.EXTRA_WHEEL_ID, id)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
     }
 
     private fun openCommentWheel() {
