@@ -132,15 +132,17 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         handler.removeCallbacks(attemptRunnable)
 
         if (!enabled) {
-            // Full stop: cancel every queued automation callback immediately.
+            // Full YM stop: no queued comments, no retries, no periodic watchdog work.
             handler.removeCallbacksAndMessages(null)
             resetFlight()
             retryAfterFailureAt = Long.MAX_VALUE
             pendingVideoAdvance = false
-            record("auto_off", "زر 4 متوقف بالكامل")
-            handler.post(watchdog)
+            record("auto_off", "YM متوقف بالكامل")
             return
         }
+
+        handler.removeCallbacks(watchdog)
+        handler.post(watchdog)
 
         if (!wasEnabled) {
             lastOutcomeSuccess = false
