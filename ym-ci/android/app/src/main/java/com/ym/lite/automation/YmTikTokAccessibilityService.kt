@@ -378,14 +378,30 @@ class YmTikTokAccessibilityService : AccessibilityService() {
     private fun directSend() {
         if (!inFlight || !textConfirmed) return
         val dm = resources.displayMetrics
-        val xFractions = floatArrayOf(0.08f, 0.92f)
-        val x = dm.widthPixels * xFractions[sendTapIndex.coerceIn(0, 1)]
         val editor = findEditorAcrossTikTok()
         val bounds = Rect()
         editor?.getBoundsInScreen(bounds)
-        val y = if (!bounds.isEmpty) bounds.centerY().toFloat() else dm.heightPixels * 0.92f
+
+        // TikTok can expand the composer with a media/image strip. In that layout
+        // the pink send arrow sits BELOW the text field (especially in Arabic/RTL),
+        // not at the editor center. Try the lower left/right positions first,
+        // then fall back to center-line positions.
+        val lowerY = if (!bounds.isEmpty) {
+            (bounds.bottom + dp(28)).toFloat().coerceAtMost(dm.heightPixels * 0.90f)
+        } else {
+            dm.heightPixels * 0.68f
+        }
+        val centerY = if (!bounds.isEmpty) bounds.centerY().toFloat() else dm.heightPixels * 0.68f
+        val taps = arrayOf(
+            0.05f to lowerY,
+            0.95f to lowerY,
+            0.05f to centerY,
+            0.95f to centerY,
+        )
+        val (xFraction, y) = taps[sendTapIndex.coerceIn(0, taps.lastIndex)]
+        val x = dm.widthPixels * xFraction
         sendTapIndex += 1
-        record("send_direct_tap", "تجربة زر الإرسال ${sendTapIndex}/2")
+        record("send_direct_tap", "تجربة زر الإرسال ${sendTapIndex}/${taps.size}")
         dispatchTap(x, y) {
             handler.postDelayed({ verifySubmitted(0) }, 420L)
         }
@@ -410,7 +426,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             return
         }
 
-        if (sendTapIndex < 2) directSend()
+        if (sendTapIndex < 4) directSend()
         else fail("send_unconfirmed", "بقي النص داخل الحقل بعد محاولات النشر")
     }
 
@@ -724,14 +740,18 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 node.getBoundsInScreen(b)
                 if (b.isEmpty) return@walk
                 val vertical = abs(b.centerY() - eb.centerY())
-                if (vertical > dp(90)) return@walk
+                if (vertical > dp(150)) return@walk
                 val gap = when {
                     b.right <= eb.left -> eb.left - b.right
                     b.left >= eb.right -> b.left - eb.right
-                    else -> return@walk
+                    else -> 0
                 }
-                if (gap > dp(150)) return@walk
-                val score = 280 - gap - vertical + sendScore(node) * 4
+                if (gap > dp(180)) return@walk
+                val edge = b.centerX() < resources.displayMetrics.widthPixels * 0.18f ||
+                    b.centerX() > resources.displayMetrics.widthPixels * 0.82f
+                val belowEditor = b.centerY() >= eb.centerY() && b.centerY() <= eb.bottom + dp(80)
+                val score = 280 - gap - vertical + sendScore(node) * 4 +
+                    (if (edge) 80 else 0) + (if (belowEditor) 70 else 0)
                 if (score > bestScore) {
                     best = node
                     bestScore = score
