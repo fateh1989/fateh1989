@@ -25,6 +25,7 @@
         <activity android:name="com.ym.lite.MainActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name="com.ym.lite.FeedActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name="com.ym.lite.comment.CommentWheelActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name="com.ym.lite.comment.GenericWheelActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name="com.ym.lite.TikTokAutoActivity" android:exported="true" android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
