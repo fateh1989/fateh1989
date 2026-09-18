@@ -196,7 +196,7 @@ class YmOverlayService : Service() {
         val button = fourthButton ?: return
         val density = resources.displayMetrics.density
         val active = autoPrefs.getBoolean("enabled", false)
-        button.text = if (active) "4\n⚡ON" else "4\n⚡"
+        button.text = if (active) "4\nON" else "4\nOFF"
         button.background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(if (active) Color.rgb(0, 125, 110) else Color.argb(235, 18, 18, 18))
