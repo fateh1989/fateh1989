@@ -16,7 +16,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.work.WorkManager
 import com.ym.lite.automation.TikTokScope
+import com.ym.lite.automation.YmTikTokAccessibilityService
 import com.ym.lite.comment.CommentWheelActivity
 import com.ym.lite.overlay.YmOverlayService
 
@@ -87,8 +89,16 @@ class TikTokAutoActivity : AppCompatActivity() {
             launchMainTikTok()
         }, matchWrap())
 
-        body.addView(actionButton("إيقاف الأزرار العائمة") {
-            startService(Intent(this, YmOverlayService::class.java).setAction(YmOverlayService.ACTION_STOP))
+        body.addView(actionButton("إيقاف YM بالكامل") {
+            getSharedPreferences("ym_auto_comment", MODE_PRIVATE)
+                .edit()
+                .putBoolean("enabled", false)
+                .apply()
+            YmTikTokAccessibilityService.notifyConfigChanged()
+            WorkManager.getInstance(this).cancelAllWork()
+            stopService(Intent(this, YmOverlayService::class.java))
+            Toast.makeText(this, "تم إيقاف YM بالكامل", Toast.LENGTH_SHORT).show()
+            finishAndRemoveTask()
         }, matchWrap())
 
         body.addView(sectionTitle("وظائف الأزرار الخمسة"))
