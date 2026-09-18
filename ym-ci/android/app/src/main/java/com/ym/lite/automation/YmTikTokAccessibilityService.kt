@@ -132,9 +132,13 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         handler.removeCallbacks(attemptRunnable)
 
         if (!enabled) {
+            // Full stop: cancel every queued automation callback immediately.
+            handler.removeCallbacksAndMessages(null)
             resetFlight()
             retryAfterFailureAt = Long.MAX_VALUE
-            record("auto_off", "زر 4 متوقف")
+            pendingVideoAdvance = false
+            record("auto_off", "زر 4 متوقف بالكامل")
+            handler.post(watchdog)
             return
         }
 
