@@ -358,6 +358,16 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 handler.postDelayed({ verifySubmitted(0) }, 380L)
                 return
             }
+            if (tapNodeCenter(send)) {
+                record("send_center_tap", "تم نقر مركز زر نشر التعليق")
+                handler.postDelayed({ verifySubmitted(0) }, 420L)
+                return
+            }
+            if (tapNodeCenter(send)) {
+                record("send_center_tap", "تم نقر مركز زر نشر التعليق")
+                handler.postDelayed({ verifySubmitted(0) }, 420L)
+                return
+            }
         } else {
             val send = bestNodeAcrossTikTok(::sendScore, 10)
             if (clickNode(send)) {
@@ -746,7 +756,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 node.getBoundsInScreen(b)
                 if (b.isEmpty) return@walk
                 val vertical = abs(b.centerY() - eb.centerY())
-                if (vertical > dp(150)) return@walk
+                if (vertical > dp(260)) return@walk
                 val gap = when {
                     b.right <= eb.left -> eb.left - b.right
                     b.left >= eb.right -> b.left - eb.right
@@ -755,7 +765,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 if (gap > dp(180)) return@walk
                 val edge = b.centerX() < resources.displayMetrics.widthPixels * 0.18f ||
                     b.centerX() > resources.displayMetrics.widthPixels * 0.82f
-                val belowEditor = b.centerY() >= eb.centerY() && b.centerY() <= eb.bottom + dp(80)
+                val belowEditor = b.centerY() >= eb.centerY() && b.centerY() <= eb.bottom + dp(190)
                 val compact = b.width() <= dp(96) && b.height() <= dp(96)
                 val score = 280 - gap - vertical + sendScore(node) * 4 +
                     (if (edge) 120 else 0) +
@@ -768,6 +778,21 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             }
         }
         return best
+    }
+
+    private fun tapNodeCenter(node: AccessibilityNodeInfo?): Boolean {
+        val target = node ?: return false
+        val bounds = Rect()
+        target.getBoundsInScreen(bounds)
+        if (bounds.isEmpty) return false
+        val dm = resources.displayMetrics
+        val x = bounds.centerX().toFloat().coerceIn(1f, (dm.widthPixels - 1).toFloat())
+        val y = bounds.centerY().toFloat().coerceIn(1f, (dm.heightPixels - 1).toFloat())
+        val path = Path().apply { moveTo(x, y) }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0L, 70L))
+            .build()
+        return dispatchGesture(gesture, null, handler)
     }
 
     private fun setClipboardText() {
