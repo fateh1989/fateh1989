@@ -158,3 +158,12 @@ When the user says `اكمل YM` or `اكمل يم`:
 6. Run the one-post proof with the phone off.
 7. Verify provider result and actual public TikTok URL.
 8. Only after that proof, use the 30-day wheel and accounts 2/3.
+
+## Known issue for next YM update — confirmed on device (v0.42)
+
+- First automatic comment can work.
+- After YM swipes to the next TikTok video, it opens the comments panel but may fail to place text in the editor, so nothing is sent.
+- Treat opening the comments panel as only an intermediate state, not success.
+- The next update must re-discover the current comment editor after every video change, wait for it to become editable/focused, insert text, verify the field actually contains text, then discover and press the current send control.
+- Do not reuse stale AccessibilityNodeInfo/editor references from the previous video.
+- Add a bounded retry/state reset when the editor is not ready, while keeping all actions scoped to the active official TikTok window.
