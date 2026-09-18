@@ -20,6 +20,7 @@ import androidx.work.WorkManager
 import com.ym.lite.automation.TikTokScope
 import com.ym.lite.automation.YmTikTokAccessibilityService
 import com.ym.lite.comment.CommentWheelActivity
+import com.ym.lite.comment.GenericWheelActivity
 import com.ym.lite.overlay.YmOverlayService
 
 class TikTokAutoActivity : AppCompatActivity() {
@@ -103,12 +104,12 @@ class TikTokAutoActivity : AppCompatActivity() {
 
         body.addView(sectionTitle("وظائف الأزرار الخمسة"))
 
-        body.addView(functionButton("1 — YM — الزر الرئيسي") {
-            Toast.makeText(this, "زر 1 — YM", Toast.LENGTH_SHORT).show()
+        body.addView(functionButton("1 — YM — الدولاب 1") {
+            openGenericWheel(1)
         }, matchWrap())
 
-        body.addView(functionButton("2 — 💬 — التعليقات") {
-            Toast.makeText(this, "زر 2 — التعليقات", Toast.LENGTH_SHORT).show()
+        body.addView(functionButton("2 — 💬 — الدولاب 2") {
+            openGenericWheel(2)
         }, matchWrap())
 
         body.addView(functionButton("3 — ⚙ — الإعدادات") {
@@ -143,6 +144,13 @@ class TikTokAutoActivity : AppCompatActivity() {
             "YM يحتاج إذن الظهور فوق التطبيقات للأزرار العائمة"
         }
         status.setTextColor(if (overlayAllowed) Color.rgb(37, 244, 238) else Color.WHITE)
+    }
+
+    private fun openGenericWheel(id: Int) {
+        startActivity(
+            Intent(this, GenericWheelActivity::class.java)
+                .putExtra(GenericWheelActivity.EXTRA_WHEEL_ID, id),
+        )
     }
 
     private fun launchMainTikTok() {
