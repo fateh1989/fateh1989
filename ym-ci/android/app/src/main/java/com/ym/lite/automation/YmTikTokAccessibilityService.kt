@@ -393,7 +393,8 @@ class YmTikTokAccessibilityService : AccessibilityService() {
         }
         val centerY = if (!bounds.isEmpty) bounds.centerY().toFloat() else dm.heightPixels * 0.68f
         val taps = arrayOf(
-            0.05f to lowerY,
+            0.045f to lowerY,
+            0.045f to (lowerY + dp(18)).coerceAtMost(dm.heightPixels * 0.90f),
             0.95f to lowerY,
             0.05f to centerY,
             0.95f to centerY,
@@ -426,7 +427,7 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             return
         }
 
-        if (sendTapIndex < 4) directSend()
+        if (sendTapIndex < 5) directSend()
         else fail("send_unconfirmed", "بقي النص داخل الحقل بعد محاولات النشر")
     }
 
@@ -734,8 +735,13 @@ class YmTikTokAccessibilityService : AccessibilityService() {
             walk(root, 850) { node ->
                 if (!node.isEnabled || node.isEditable) return@walk
                 if (!node.isClickable && !supports(node, AccessibilityNodeInfo.ACTION_CLICK)) return@walk
-                val t = token(node)
-                if (containsAny(t, "emoji", "sticker", "gif", "mention", "camera", "photo", "image", "voice", "microphone", "audio")) return@walk
+                val mediaToken = listOfNotNull(
+                    node.text,
+                    node.contentDescription,
+                    node.hintText,
+                    node.viewIdResourceName,
+                ).joinToString(" ").lowercase()
+                if (containsAny(mediaToken, "emoji", "sticker", "gif", "mention", "camera", "photo", "gallery", "voice", "microphone", "audio")) return@walk
                 val b = Rect()
                 node.getBoundsInScreen(b)
                 if (b.isEmpty) return@walk
@@ -750,8 +756,11 @@ class YmTikTokAccessibilityService : AccessibilityService() {
                 val edge = b.centerX() < resources.displayMetrics.widthPixels * 0.18f ||
                     b.centerX() > resources.displayMetrics.widthPixels * 0.82f
                 val belowEditor = b.centerY() >= eb.centerY() && b.centerY() <= eb.bottom + dp(80)
+                val compact = b.width() <= dp(96) && b.height() <= dp(96)
                 val score = 280 - gap - vertical + sendScore(node) * 4 +
-                    (if (edge) 80 else 0) + (if (belowEditor) 70 else 0)
+                    (if (edge) 120 else 0) +
+                    (if (belowEditor) 110 else 0) +
+                    (if (compact) 60 else 0)
                 if (score > bestScore) {
                     best = node
                     bestScore = score
