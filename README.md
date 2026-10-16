@@ -7,6 +7,7 @@ This repository is the canonical handoff point for future ChatGPT conversations 
 Then read as needed:
 
 - `PROJECTS.md` — maps project names to repositories/locations and current status.
+- [`GITHUB_REPOSITORY_INVENTORY.md`](GITHUB_REPOSITORY_INVENTORY.md) — audited list of 16 GitHub repositories, preservation rules, known releases, and the ImageCollector stable reference (2026-10-17).
 - `BRIDGE.md` — Android/Termux Bridge architecture, paths, known issues, and verification rules.
 - `WORKING_RULES.md` — engineering, testing, communication, cost, and workflow preferences.
 - `PROGRAMMING_KNOWLEDGE.md` — reusable programming lessons, Android/CI/debug architecture, and proven engineering patterns learned across projects.
