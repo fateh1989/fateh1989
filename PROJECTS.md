@@ -2,6 +2,8 @@
 
 This is the canonical cross-session index for projects, infrastructure, and research owned or tracked by this account. Future ChatGPT conversations and coding agents should resolve names here before assuming a repository, rebuilding anything, or asking the user to repeat prior context.
 
+**GitHub repository inventory (observed 2026-10-17):** [GITHUB_REPOSITORY_INVENTORY.md](GITHUB_REPOSITORY_INVENTORY.md) lists all 16 repositories accessible through the current GitHub connection, known release references, and preservation safeguards. Its snapshot does **not** automatically override project mappings or statuses here; investigate mismatches (including the unavailable `fateh1989/1122` reference) before changing an existing project.
+
 ## Active / tracked work
 
 | Name | Canonical location | Primary branch | Status / purpose | Continuation rule |
