@@ -6,6 +6,23 @@
 >
 > للإرشادات العامة وحالة المشاريع الأخرى، اقرأ [PROJECTS.md](PROJECTS.md) و[WORKING_RULES.md](WORKING_RULES.md). لا تعتبر هذا السجل بديلًا عنهما.
 
+## نتائج تنظيف APK بتاريخ 2026-10-17 — تم التحقق من GitHub
+
+تم تنفيذ حذف **مرفقات APK القديمة فقط** في المستودعين اللذين لهما نسخة مرجعية حديثة محددة، بعد التحقق من SHA-256 وأحجام ملفات الاستبدال:
+
+| المستودع | النسخة المتبقية | القديمة التي حُذفت | الحجم المزال (بايت) | دليل النجاح |
+|---|---|---:|---:|---|
+| [ImageCollector](https://github.com/fateh1989/ImageCollector) | [`preview-478f12fbcf47`](https://github.com/fateh1989/ImageCollector/releases/tag/preview-478f12fbcf47): `app-debug.apk` SHA-256 `8d7fe3e148a30bec7d99a3c58db401abcc5e86fedf9960f450b1679f25d8ad26` | 40 APK | 3,174,492,066 | [Actions #38982043175](https://github.com/fateh1989/ImageCollector/actions/runs/38982043175) — success |
+| [Sadaqah-1](https://github.com/fateh1989/Sadaqah-1) | [`player-38696765652`](https://github.com/fateh1989/Sadaqah-1/releases/tag/player-38696765652): `app-release.apk` SHA-256 `fcb02ae658b3973887e758197b3856a4ba9b88930008958e87e61916ee6883a2` | 15 APK | 6,103,271,873 | [Actions #38982121109](https://github.com/fateh1989/Sadaqah-1/actions/runs/38982121109) — success |
+
+**الإجمالي:** 55 APK قديمًا بمجموع **9,277,763,939 بايت (9.28 GB عشرية)** أُزيلت من مرفقات GitHub Releases. **لا يعني ذلك تحرير حصة GitHub Actions Artifacts**، لأنها مساحة تخزين منفصلة.
+
+- **لم تُحذف إصدارات GitHub ككيانات، ولا الوسوم، ولا تاريخ الالتزامات، ولا مفاتيح التوقيع، ولا ملفات AAB، ولا التسجيلات الأصلية.**
+- تأكدنا بعد التنظيف أن ImageCollector لديه APK واحد وأن إصدار `imagecollector-development-signing-v1` يحتفظ بملف `debug.keystore`، وأن [نقطة الرجوع](https://github.com/fateh1989/ImageCollector/tree/stable/2026-10-17-search-scroll-resume) لم تتحرك.
+- تأكدنا بعد التنظيف أن Sadaqah-1 لديه APK واحد وAAB للنسخة الأخيرة وأن [`audio-assets-1`](https://github.com/fateh1989/Sadaqah-1/releases/tag/audio-assets-1) لا يزال يحوي `1.oga` و`3.mp3` و`mp3.2.mp3`، وأن [نقطة الرجوع](https://github.com/fateh1989/Sadaqah-1/tree/stable/2026-10-17-player-signed-last-accepted) مثبتة.
+- فحص GitHub بعد التنظيف أثبت تطابق مرجع `main` مع النسخة المحمية في كل منهما. **بقية المستودعات الـ14 لم تُمس ملفات APK فيها**؛ لغياب إثبات نسخة مستقرة بديلة آمنة، أو لعدم وجود نسخ أقدم يلزم حذفها، أو لوجود هويات/توقيعات إصدار مختلفة.
+- أنشئت مهام صيانة في **فرع منفصل** لكل مستودع، وعملت بنجاح مرة واحدة ولم تُعدّل تطبيق `main`. إذا أعيد تشغيلها مع غياب قائمة المرفقات القديمة، تفشل مرحلة التحقق قبل الحذف. لا تعِد استخدامها كتنظيف تلقائي دائم.
+
 ## قاعدة الحفاظ على النسخ
 
 1. لا تحذف أو تعيد تسمية أو تدمج أي مستودع/فرع/وسم/إصدار أو ملف صوتي أو أصل قبل التحقق من اعتماده وموافقة المستخدم الصريحة.
